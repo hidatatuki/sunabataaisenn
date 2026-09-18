@@ -20,9 +20,9 @@
         #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; display: none; }
         .panel { position: absolute; background: rgba(0, 0, 0, 0.7); padding: 10px; border-radius: 8px; pointer-events: auto; }
         #top-bar { top: 15px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 18px; font-weight: bold; }
-        #player-info { top: 15px; left: 15px; }
-        #enemy-info { top: 15px; right: 15px; text-align: right;}
-        #unit-ui { bottom: 15px; left: 50%; transform: translateX(-50%); display: none; width: 450px; text-align: center; }
+        #player-info { bottom: 15px; left: 15px; top: auto; }
+        #enemy-info { top: 15px; right: 15px; text-align: right; }
+        #unit-ui { bottom: 120px; left: 50%; transform: translateX(-50%); display: none; width: 450px; text-align: center; }
         .btn {
             background: #3498db; color: white; border: none; padding: 8px 15px; margin: 5px;
             cursor: pointer; border-radius: 4px; font-weight: bold; touch-action: manipulation;
@@ -188,12 +188,12 @@
         let pHP = castles.player.hp !== undefined ? castles.player.hp : 1000;
         let eHP = castles.enemy.hp !== undefined ? castles.enemy.hp : 1000;
 
-        castles.player = { x: 150, y: h / 2, hp: pHP, maxHp: 1000, color: '#3498db' };
-        castles.enemy = { x: w - 150, y: h / 2, hp: eHP, maxHp: 1000, color: '#e74c3c' };
+        castles.player = { x: w / 2, y: h - 120, hp: pHP, maxHp: 1000, color: '#3498db' };
+        castles.enemy = { x: w / 2, y: 120, hp: eHP, maxHp: 1000, color: '#e74c3c' };
 
         mountains = [
-            { x: w / 2, y: h / 4, r: 60, owner: null, cap: 0 },
-            { x: w / 2, y: h * 3 / 4, r: 60, owner: null, cap: 0 }
+            { x: w / 3, y: h / 2, r: 60, owner: null, cap: 0 },
+            { x: w * 2 / 3, y: h / 2, r: 60, owner: null, cap: 0 }
         ];
 
         summonList = [
@@ -365,12 +365,12 @@
             
             if (globalCost.enemy >= costMap[chosenType]) {
                 globalCost.enemy -= costMap[chosenType];
-                let startX = castles.enemy.x - 60;
-                let startY = castles.enemy.y + (Math.random() * 120 - 60);
+                let startX = castles.enemy.x + (Math.random() * 120 - 60);
+                let startY = castles.enemy.y + 60;
                 let enemyUnit = new Unit('enemy', chosenType, startX, startY);
                 
-                enemyUnit.tx = castles.player.x + 40;
-                enemyUnit.ty = castles.player.y + (Math.random() * 120 - 60);
+                enemyUnit.tx = castles.player.x + (Math.random() * 120 - 60);
+                enemyUnit.ty = castles.player.y - 40;
                 units.push(enemyUnit);
             }
         }
@@ -378,8 +378,8 @@
         if (frameCount % 150 === 0) {
             units.forEach(u => {
                 if (u.team === 'enemy' && !u.isMoving) {
-                    u.tx = castles.player.x + 30 + Math.random() * 40;
-                    u.ty = castles.player.y + (Math.random() * 160 - 80);
+                    u.tx = castles.player.x + (Math.random() * 120 - 60);
+                    u.ty = castles.player.y - (Math.random() * 120 - 40);
                 }
             });
         }
@@ -546,11 +546,11 @@
                     else globalCost.enemy -= item.cost;
                     
                     let castleObj = (myTeamSide === 'player') ? castles.player : castles.enemy;
-                    let startX = castleObj.x + (myTeamSide === 'player' ? 50 : -50);
-                    let startY = castleObj.y + (Math.random() * 80 - 40);
+                    let startX = castleObj.x + (Math.random() * 80 - 40);
+                    let startY = castleObj.y + (myTeamSide === 'player' ? -60 : 60);
                     let newUnit = new Unit(myTeamSide, item.type, startX, startY);
-                    newUnit.tx = startX + (myTeamSide === 'player' ? 50 : -50);
-                    newUnit.ty = startY;
+                    newUnit.tx = startX + (Math.random() * 80 - 40);
+                    newUnit.ty = castleObj.y + (myTeamSide === 'player' ? -140 : 140);
                     
                     units.push(newUnit);
                     updateUI();
