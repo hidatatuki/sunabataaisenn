@@ -5,10 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D ドルフィン・スコアアタック</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #00152b; font-family: sans-serif; user-select: none; }
+        :root {
+        --panel-bg: rgba(0, 0, 0, 0.45);
+    }
+    html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #00152b;
+        font-family: sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+    }
+    body {
+        position: relative;
+    }
         #ui { position: absolute; top: 20px; left: 20px; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8); pointer-events: none; }
-        h1 { margin: 0 0 10px 0; font-size: 22px; color: #00ffff; }
-        .stat { font-size: 20px; margin-bottom: 8px; font-weight: bold; }
+        h1 { margin: 0 0 10px 0; font-size: clamp(18px, 2vw, 22px); color: #00ffff; }
+        .stat { font-size: clamp(14px, 1.6vw, 20px); margin-bottom: 8px; font-weight: bold; }
         #combo-popup {
             position: absolute;
             top: 40%;
@@ -23,7 +39,7 @@
             transition: opacity 0.3s, transform 0.3s;
             z-index: 5;
         }
-        #controls-info { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 10px; color: #fff; text-align: center; border: 1px solid rgba(255,255,255,0.3); font-size: 14px; }
+        #controls-info { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 10px; color: #fff; text-align: center; border: 1px solid rgba(255,255,255,0.3); font-size: 14px; line-height: 1.6; max-width: min(92vw, 780px); }
         #message-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0, 30, 60, 0.95); color: #fff; z-index: 10; }
         #message-overlay h2 { font-size: 36px; margin-bottom: 15px; text-shadow: 0 0 10px #00ffff; text-align: center; }
         .input-group { margin-bottom: 20px; text-align: center; }
@@ -31,6 +47,27 @@
         .input-group input { padding: 10px 15px; font-size: 18px; border-radius: 8px; border: 2px solid #00ffff; background: rgba(0,0,0,0.5); color: #fff; text-align: center; outline: none; width: 220px; }
         .btn { padding: 12px 30px; font-size: 18px; font-weight: bold; background: #00ffff; color: #000; border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 0 15px rgba(0,255,255,0.5); transition: 0.2s; }
         .btn:hover { background: #fff; transform: scale(1.05); }
+        @media (max-width: 700px) {
+            #ui {
+                top: 12px;
+                left: 12px;
+                right: 12px;
+            }
+            #controls-info {
+                bottom: 12px;
+                font-size: 11px;
+                padding: 8px 10px;
+            }
+            #message-overlay h2 {
+                font-size: 28px;
+            }
+            .input-group input {
+                width: min(72vw, 220px);
+            }
+            #ranking-container {
+                width: min(82vw, 300px);
+            }
+        }
         #ranking-container { background: rgba(0,0,0,0.5); border: 1px solid rgba(0,255,255,0.4); border-radius: 10px; padding: 15px; margin-bottom: 20px; width: 300px; text-align: left; }
         #ranking-container h3 { margin: 0 0 10px 0; font-size: 18px; color: #ffcc00; text-align: center; }
         .ranking-item { display: flex; justify-content: space-between; font-size: 16px; margin-bottom: 6px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 4px; }
@@ -89,6 +126,11 @@
         let tiltY = 0;
         let tapBoost = false;
         let autoSteer = 0;
+        let dragTiltX = 0;
+        let dragTiltY = 0;
+        let touchDragActive = false;
+        let lastTouchX = 0;
+        let lastTouchY = 0;
         
         let rings = [], boosters = [], jumps = [], coins = [];
         let highScores = JSON.parse(localStorage.getItem('dolphin_highscores') || '[]');
@@ -113,7 +155,8 @@
 
             camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1500);
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
@@ -133,10 +176,12 @@
             window.addEventListener("resize", onWindowResize);
             window.addEventListener("deviceorientation", handleOrientation, true);
             window.addEventListener("touchstart", handleTouchBoost, { passive: false });
-            window.addEventListener("touchend", () => { tapBoost = false; }, { passive: false });
-            window.addEventListener("touchcancel", () => { tapBoost = false; }, { passive: false });
+            window.addEventListener("touchmove", handleTouchMove, { passive: false });
+            window.addEventListener("touchend", () => { tapBoost = false; touchDragActive = false; }, { passive: false });
+            window.addEventListener("touchcancel", () => { tapBoost = false; touchDragActive = false; }, { passive: false });
             window.addEventListener("pointerdown", handleTouchBoost);
-            window.addEventListener("pointerup", () => { tapBoost = false; });
+            window.addEventListener("pointermove", handleTouchMove);
+            window.addEventListener("pointerup", () => { tapBoost = false; touchDragActive = false; dragTiltX *= 0.5; dragTiltY *= 0.5; });
 
             renderer.render(scene, camera);
         }
@@ -290,9 +335,38 @@
             }
         }
 
+        function requestMotionPermission() {
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const hasPermissionAPI = typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function';
+
+            if (!isMobile || !hasPermissionAPI) {
+                return Promise.resolve(true);
+            }
+
+            return DeviceOrientationEvent.requestPermission().then((result) => result === 'granted');
+        }
+
         function handleTouchBoost(e) {
             if (e && typeof e.preventDefault === 'function') e.preventDefault();
             tapBoost = true;
+            if (e && (e.pointerType === 'touch' || e.type === 'touchstart')) {
+                touchDragActive = true;
+                lastTouchX = e.clientX || 0;
+                lastTouchY = e.clientY || 0;
+            }
+        }
+
+        function handleTouchMove(e) {
+            if (!touchDragActive || !gameActive) return;
+            const currX = e.clientX || 0;
+            const currY = e.clientY || 0;
+            const dx = currX - lastTouchX;
+            const dy = currY - lastTouchY;
+            lastTouchX = currX;
+            lastTouchY = currY;
+
+            dragTiltX = Math.max(-1, Math.min(1, dragTiltX + dx / 220));
+            dragTiltY = Math.max(-1, Math.min(1, dragTiltY + dy / 220));
         }
 
         function startGame() {
@@ -302,12 +376,24 @@
             }
             document.getElementById("player-name-val").innerText = playerName;
 
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            if (isMobile && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission().then((result) => {
+                    if (result !== 'granted') {
+                        showPopup('📱 傾きの許可をお願いします');
+                    }
+                }).catch(() => {
+                    showPopup('📱 傾きの許可をお願いします');
+                });
+            }
+
             document.getElementById("message-overlay").style.display = "none";
             gameActive = true;
             score = 0;
             gameTime = 60;
             playerZ = 0; playerSpeed = 0.5; playerX = 0; playerY = 0;
             verticalVelocity = 0; boostTimer = 0;
+            dragTiltX = 0; dragTiltY = 0; touchDragActive = false;
 
             rings.forEach(r => { r.collected = false; r.mesh.visible = true; });
             coins.forEach(c => { c.collected = false; c.mesh.visible = true; });
@@ -401,15 +487,17 @@
                     document.getElementById("boost-status").innerText = "";
                 }
 
-                const mobileSteer = tiltX * 0.12;
+                const effectiveTiltX = tiltX + dragTiltX;
+                const effectiveTiltY = tiltY + dragTiltY;
+                const mobileSteer = effectiveTiltX * 0.12;
                 if (mobileSteer > 0.04) playerX -= 0.09;
                 if (mobileSteer < -0.04) playerX += 0.09;
 
-                const mobileBoost = tapBoost || ((Math.abs(tiltY) > 0.25) && tiltY < -0.15);
+                const mobileBoost = tapBoost || ((Math.abs(effectiveTiltY) > 0.25) && effectiveTiltY < -0.15);
                 if (keys.up || mobileBoost) {
                     playerSpeed += acceleration * 1.15;
                     if (playerSpeed > currentMaxSpeed) playerSpeed = currentMaxSpeed;
-                } else if (keys.down || tiltY > 0.3) {
+                } else if (keys.down || effectiveTiltY > 0.3) {
                     playerSpeed -= deceleration * 1.2;
                     if (playerSpeed < 0) playerSpeed = 0;
                 } else {
@@ -498,6 +586,7 @@
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
     </script>
