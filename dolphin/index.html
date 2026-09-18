@@ -345,20 +345,21 @@
         }
 
         function handleOrientation(event) {
-            if (typeof event.gamma === 'number') {
-                const rawX = Math.max(-30, Math.min(30, event.gamma));
-                tiltX = rawX / 30;
-            }
-            if (typeof event.beta === 'number') {
-                const rawY = Math.max(-30, Math.min(30, event.beta - 20));
-                tiltY = rawY / 30;
-            }
+            const gamma = Number.isFinite(event.gamma) ? event.gamma : 0;
+            const beta = Number.isFinite(event.beta) ? event.beta : 0;
+
+            const rawX = Math.max(-30, Math.min(30, gamma));
+            tiltX = rawX / 30;
+
+            const rawY = Math.max(-30, Math.min(30, beta - 20));
+            tiltY = rawY / 30;
         }
 
         function bindMotionListener() {
             if (motionListenerReady) return;
             if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
                 window.addEventListener('deviceorientation', handleOrientation, true);
+                window.addEventListener('deviceorientationabsolute', handleOrientation, true);
                 motionListenerReady = true;
             }
         }
@@ -384,6 +385,7 @@
                 return motionPermissionGranted;
             } catch (error) {
                 motionPermissionGranted = false;
+                bindMotionListener();
                 showPopup('📱 傾きが使えないため、タップで加速してください');
                 return false;
             }
