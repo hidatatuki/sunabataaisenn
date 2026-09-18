@@ -9,6 +9,12 @@
 - ドルフィン スコアアタック
   - 3Dの海中アクションゲーム
   - `dolphin/index.html` を開く
+- 葉切り一閃
+  - 反射神経を競う2Dの落下物切りゲーム
+  - `leaf-cut/index.html` を開く
+- 縁日射的屋 3D
+  - 射的ゲームの3D版
+  - `shooting/index.html` を開く
 
 ## トップページ
 - `index.html` を開くと、ゲームを選んで遊べます
