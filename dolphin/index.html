@@ -17,7 +17,7 @@
         font-family: sans-serif;
         user-select: none;
         -webkit-user-select: none;
-        touch-action: none;
+        touch-action: manipulation;
     }
     body {
         position: relative;
@@ -44,8 +44,8 @@
         #message-overlay h2 { font-size: 36px; margin-bottom: 15px; text-shadow: 0 0 10px #00ffff; text-align: center; }
         .input-group { margin-bottom: 20px; text-align: center; }
         .input-group label { display: block; font-size: 16px; margin-bottom: 8px; color: #00ffff; }
-        .input-group input { padding: 10px 15px; font-size: 18px; border-radius: 8px; border: 2px solid #00ffff; background: rgba(0,0,0,0.5); color: #fff; text-align: center; outline: none; width: 220px; }
-        .btn { padding: 12px 30px; font-size: 18px; font-weight: bold; background: #00ffff; color: #000; border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 0 15px rgba(0,255,255,0.5); transition: 0.2s; }
+        .input-group input { padding: 10px 15px; font-size: 18px; border-radius: 8px; border: 2px solid #00ffff; background: rgba(0,0,0,0.5); color: #fff; text-align: center; outline: none; width: 220px; touch-action: manipulation; }
+        .btn { padding: 12px 30px; font-size: 18px; font-weight: bold; background: #00ffff; color: #000; border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 0 15px rgba(0,255,255,0.5); transition: 0.2s; touch-action: manipulation; }
         .btn:hover { background: #fff; transform: scale(1.05); }
         @media (max-width: 700px) {
             #ui {
@@ -358,7 +358,7 @@
         }
 
         function handleTouchBoost(e) {
-            if (!e) return;
+            if (!e || !gameActive) return;
 
             const target = e.target;
             if (target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.closest && (target.closest('button') || target.closest('input')))) {
@@ -375,7 +375,7 @@
         }
 
         function handleTouchMove(e) {
-            if (!touchDragActive || !gameActive) return;
+            if (!gameActive || !touchDragActive) return;
             const currX = e.clientX || 0;
             const currY = e.clientY || 0;
             const dx = currX - lastTouchX;
