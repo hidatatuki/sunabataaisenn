@@ -246,6 +246,9 @@
         const aimGunPos = new THREE.Vector3(0, -0.050, -0.2);
 
         let pitch = 0, yaw = 0;
+        let motionYaw = 0, motionPitch = 0;
+        let motionPermissionGranted = false;
+        let motionListenerReady = false;
 
         function initAudio() {
             if (!audioCtx) {
@@ -290,6 +293,46 @@
 
             osc.start();
             osc.stop(audioCtx.currentTime + 0.05);
+        }
+
+        function bindMotionListener() {
+            if (motionListenerReady) return;
+            window.addEventListener('deviceorientation', handleOrientation, true);
+            motionListenerReady = true;
+        }
+
+        function handleOrientation(event) {
+            if (typeof event.gamma === 'number') {
+                const targetYaw = Math.max(-1, Math.min(1, event.gamma / 32));
+                motionYaw = targetYaw * (Math.PI / 3);
+            }
+            if (typeof event.beta === 'number') {
+                const targetPitch = Math.max(-1, Math.min(1, (event.beta - 40) / 55));
+                motionPitch = targetPitch * (Math.PI / 6);
+            }
+        }
+
+        async function requestMotionPermission() {
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const hasPermissionAPI = typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function';
+
+            if (!isMobile || !hasPermissionAPI) {
+                motionPermissionGranted = true;
+                bindMotionListener();
+                return true;
+            }
+
+            try {
+                const result = await DeviceOrientationEvent.requestPermission();
+                motionPermissionGranted = result === 'granted';
+                if (motionPermissionGranted) {
+                    bindMotionListener();
+                }
+                return motionPermissionGranted;
+            } catch (error) {
+                motionPermissionGranted = false;
+                return false;
+            }
         }
 
         function init() {
@@ -343,6 +386,14 @@
             window.addEventListener('pointerup', onPointerUp);
             window.addEventListener('pointercancel', onPointerUp);
             document.addEventListener('contextmenu', e => e.preventDefault());
+
+            const isIOSPermissionNeeded = /iPhone|iPad|iPod/i.test(navigator.userAgent) &&
+                typeof DeviceOrientationEvent !== 'undefined' &&
+                typeof DeviceOrientationEvent.requestPermission === 'function';
+            if (!isIOSPermissionNeeded) {
+                bindMotionListener();
+                motionPermissionGranted = true;
+            }
 
             animate();
         }
@@ -792,16 +843,19 @@
             document.getElementById('result-screen').style.display = 'flex';
         }
 
-        function startGame() {
+        async function startGame() {
             initAudio();
+            await requestMotionPermission();
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('result-screen').style.display = 'none';
             isGameStarted = true;
 
-            document.body.requestPointerLock();
+            if (!/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+                document.body.requestPointerLock();
+            }
 
             document.body.addEventListener('click', () => {
-                if (isGameStarted && document.pointerLockElement !== document.body) {
+                if (isGameStarted && !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && document.pointerLockElement !== document.body) {
                     document.body.requestPointerLock();
                 }
             });
@@ -873,6 +927,11 @@
             lastTime = now;
 
             world.step(1 / 60, delta, 5);
+
+            if (motionPermissionGranted && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+                yaw = motionYaw;
+                pitch = motionPitch;
+            }
 
             const targetPos = isAiming ? aimGunPos : normalGunPos;
             gunGroup.position.lerp(targetPos, 0.2);
