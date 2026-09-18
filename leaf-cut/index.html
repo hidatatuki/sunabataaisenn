@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>一閃！葉切りゲーム（重複記録バグ完全修正版）</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #1a261a;
+      color: #fff;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #game-container {
+      position: relative;
+      width: 600px;
+      height: 800px;
+      background: linear-gradient(to bottom, #2d4a3e, #132018);
+      border: 4px solid #4a7c59;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20px;
+    }
+    .stats {
+      display: flex;
+      justify-content: space-between;
+      font-size: 20px;
+      font-weight: bold;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    }
+    .level-info {
+      color: #7efc00;
+    }
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      pointer-events: auto;
+      z-index: 10;
+    }
+    .screen-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+    }
+    h1 {
+      margin: 0 0 10px 0;
+      font-size: 40px;
+      color: #7efc00;
+      text-shadow: 0 0 10px rgba(126, 252, 0, 0.5);
+    }
+    p {
+      margin: 5px 0;
+      color: #ddd;
+      font-size: 15px;
+      text-align: center;
+      line-height: 1.5;
+    }
+    .btn {
+      margin-top: 20px;
+      padding: 14px 36px;
+      font-size: 22px;
+      font-weight: bold;
+      color: #1a261a;
+      background: #7efc00;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(126, 252, 0, 0.4);
+      transition: transform 0.1s, background 0.2s;
+    }
+    .btn:hover {
+      background: #99ff33;
+      transform: scale(1.05);
+    }
+    .btn:active {
+      transform: scale(0.95);
+    }
+    #player-name {
+      margin-top: 15px;
+      padding: 10px;
+      font-size: 18px;
+      text-align: center;
+      border-radius: 8px;
+      border: 2px solid #7efc00;
+      background: #132018;
+      color: #fff;
+      outline: none;
+      width: 250px;
+      pointer-events: auto;
+    }
+    .ranking-box {
+      margin-top: 20px;
+      background: rgba(0, 0, 0, 0.6);
+      border: 2px solid #4a7c59;
+      border-radius: 10px;
+      padding: 15px;
+      width: 300px;
+    }
+    .ranking-box h3 {
+      margin: 0 0 10px 0;
+      color: #ffeb3b;
+      text-align: center;
+      font-size: 20px;
+    }
+    .ranking-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      color: #fff;
+      font-size: 16px;
+    }
+    .ranking-list li {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+      border-bottom: 1px dashed #4a7c59;
+      padding-bottom: 3px;
+    }
+    .final-score {
+      font-size: 48px;
+      color: #ffeb3b;
+      margin: 20px 0;
+      text-shadow: 0 0 15px rgba(255, 235, 59, 0.6);
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="gameCanvas" width="600" height="800"></canvas>
+  
+  <div class="ui-layer">
+    <div class="stats">
+      <div class="level-info">LV.<span id="level">1</span> (<span id="next-level">30</span>s)</div>
+      <div>SCORE: <span id="score">0</span></div>
+      <div>LIFE: <span id="life">❤️❤️❤️</span></div>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay">
+    
+    <!-- タイトル画面 -->
+    <div id="title-screen" class="screen-panel">
+      <h1>葉切り一閃</h1>
+      <p>落ちてくるオブジェクトが<br><strong style="color:#ff4444;">赤いライン</strong>に重なったらボタンを押せ！</p>
+      <p style="margin-top: 10px; color: #ffeb3b; font-size: 14px;">
+        ⏱ 30秒ごとにレベルアップ！<br>
+        🌪 LV.3から3〜5秒ごとに「強風」発生！<br>
+        🪵 LV.3から高速直交の「木の棒」が登場！<br>
+        💣 LV.5以降の強風時に「爆弾」出現！（切ると即死）
+      </p>
+      
+      <input type="text" id="player-name" placeholder="プレイヤー名を入力" value="名無し" maxlength="10">
+      
+      <div class="ranking-box">
+        <h3>🏆 RANKING 🏆</h3>
+        <ul id="ranking-list" class="ranking-list">
+          <!-- ランキング表示 -->
+        </ul>
+      </div>
+
+      <p style="margin-top: 15px; color: #aaa;">[SPACEキー] または [画面タップ]</p>
+      <button id="start-btn" class="btn">スタート</button>
+    </div>
+
+    <!-- ゲームオーバー画面 -->
+    <div id="gameover-screen" class="screen-panel" style="display: none;">
+      <h1 style="color: #ff4444; text-shadow: 0 0 10px rgba(255, 68, 68, 0.5);">GAME OVER</h1>
+      <div class="final-score">SCORE: <span id="final-score-value">0</span></div>
+      <button id="back-title-btn" class="btn">タイトルへ戻る</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const lifeEl = document.getElementById('life');
+  const levelEl = document.getElementById('level');
+  const nextLevelEl = document.getElementById('next-level');
+  
+  const overlay = document.getElementById('overlay');
+  const titleScreen = document.getElementById('title-screen');
+  const gameoverScreen = document.getElementById('gameover-screen');
+  const startBtn = document.getElementById('start-btn');
+  const backTitleBtn = document.getElementById('back-title-btn');
+  
+  const playerNameInput = document.getElementById('player-name');
+  const rankingListEl = document.getElementById('ranking-list');
+  const finalScoreValue = document.getElementById('final-score-value');
+
+  const TARGET_Y = 640;
+  const TARGET_HEIGHT = 60;
+  const MAX_LIFE = 3;
+  const RANKING_STORAGE_KEY = 'leafGameRankingV2';
+
+  let gameState = 'START';
+  let score = 0;
+  let combo = 0;
+  let lives = MAX_LIFE;
+  let currentLevel = 1;
+  let levelTimer = 0;
+  let items = [];
+  let popups = [];
+  let slashLine = null;
+  let spawnTimer = 0;
+  let spawnInterval = 180; 
+
+  let windTimer = 0;
+  let nextWindInterval = 180;
+  let windDuration = 0;
+  let isWindy = false;
+
+  let currentPlayerName = "名無し";
+
+  // --- ランキング処理 ---
+  function getRankings() {
+    const saved = localStorage.getItem(RANKING_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  }
+
+  function saveRanking(name, newScore) {
+    let ranks = getRankings();
+    ranks.push({ name: name || "名無し", score: newScore });
+    ranks.sort((a, b) => b.score - a.score);
+    ranks = ranks.slice(0, 5); // トップ5まで
+    localStorage.setItem(RANKING_STORAGE_KEY, JSON.stringify(ranks));
+  }
+
+  function renderRankings() {
+    const ranks = getRankings();
+    rankingListEl.innerHTML = '';
+    
+    if (ranks.length === 0) {
+      rankingListEl.innerHTML = '<li style="justify-content: center; color: #aaa;">まだ記録がありません</li>';
+      return;
+    }
+
+    ranks.forEach((r, index) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span>${index + 1}位 ${r.name}</span><span>${r.score}pt</span>`;
+      rankingListEl.appendChild(li);
+    });
+  }
+
+  renderRankings();
+
+  // --- 落下オブジェクト ---
+  class FallingItem {
+    constructor(level, currentWindState) {
+      this.x = Math.random() * (canvas.width - 120) + 60;
+      this.y = -40;
+      this.cut = false;
+      this.pieces = [];
+
+      this.type = 'leaf';
+      let bombProb = 0;
+      let stickProb = 0;
+
+      if (level >= 3) {
+        stickProb = 0.20;
+      }
+
+      if (level >= 5 && currentWindState) {
+        bombProb = 0.35;
+      }
+
+      const rand = Math.random();
+      if (rand < bombProb) {
+        this.type = 'bomb';
+      } else if (rand < bombProb + stickProb) {
+        this.type = 'stick';
+      }
+
+      if (this.type === 'bomb') {
+        this.width = 40;
+        this.height = 40;
+        this.speed = 2.5;
+        this.baseSwingWidth = 0;
+        this.swingSpeed = 0.05;
+        this.angle = 0;
+      } else if (this.type === 'stick') {
+        this.width = 16;
+        this.height = 60;
+        this.speed = 6.5; 
+        this.baseSwingWidth = 0;
+        this.swingSpeed = 0.05;
+        this.angle = 0;
+      } else {
+        this.width = 50;
+        this.height = 30;
+        this.angle = Math.random() * Math.PI * 2;
+
+        if (level === 1) {
+          this.speed = 2.2;
+          this.baseSwingWidth = 1.0;
+          this.swingSpeed = 0.03;
+        } else if (level === 2) {
+          this.speed = 2.2;
+          this.baseSwingWidth = Math.random() < 0.3 ? 3.5 : 1.0;
+          this.swingSpeed = 0.03;
+        } else {
+          this.speed = 3.5 + Math.random() * 1.5;
+          this.baseSwingWidth = 1.5 + Math.random() * 3.0;
+          this.swingSpeed = 0.03 + Math.random() * 0.03;
+        }
+      }
+
+      this.baseSwingSpeed = this.swingSpeed;
+    }
+
+    update() {
+      if (!this.cut) {
+        this.y += this.speed;
+
+        let currentSwingWidth = this.baseSwingWidth;
+        let currentSwingSpeed = this.baseSwingSpeed;
+
+        if (isWindy) {
+          if (this.type === 'leaf') {
+            currentSwingSpeed *= 3.5;
+            currentSwingWidth = this.baseSwingWidth + (Math.random() * 4.0);
+          } else if (this.type === 'bomb') {
+            currentSwingWidth = 2.5;
+          } else if (this.type === 'stick') {
+            currentSwingWidth = 1.5;
+          }
+        }
+
+        if (currentSwingWidth > 0) {
+          this.angle += currentSwingSpeed;
+          this.x += Math.sin(this.angle) * currentSwingWidth;
+        }
+
+      } else {
+        this.pieces.forEach(p => {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.3;
+          p.rotation += p.vRot;
+          p.alpha -= 0.02;
+        });
+      }
+    }
+
+    draw() {
+      if (!this.cut) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        
+        if (this.type === 'bomb') {
+          ctx.rotate(Math.sin(this.angle) * (isWindy ? 0.3 : 0));
+          ctx.font = '36px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('💣', 0, 0);
+        } else if (this.type === 'stick') {
+          ctx.rotate(Math.sin(this.angle) * (isWindy ? 0.15 : 0));
+          ctx.fillStyle = '#8B4513';
+          ctx.strokeStyle = '#5c2d0c';
+          ctx.lineWidth = 2;
+          ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+          ctx.strokeRect(-this.width / 2, -this.height / 2, this.width, this.height);
+        } else {
+          ctx.rotate(Math.sin(this.angle) * (isWindy ? 0.8 : 0.3));
+          ctx.fillStyle = '#4CAF50';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, this.width / 2, this.height / 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#2E7D32';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(-this.width / 2, 0);
+          ctx.lineTo(this.width / 2, 0);
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      } else {
+        this.pieces.forEach(p => {
+          if (p.alpha <= 0) return;
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.alpha);
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
+
+          if (this.type === 'stick') {
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(-this.width / 2, -this.height / 4, this.width, this.height / 2);
+          } else {
+            ctx.fillStyle = '#4CAF50';
+            ctx.beginPath();
+            ctx.arc(0, 0, this.width / 2, p.startAngle, p.endAngle);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#2E7D32';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+
+          ctx.restore();
+        });
+      }
+    }
+  }
+
+  class PopupText {
+    constructor(text, x, y, color) {
+      this.text = text;
+      this.x = x;
+      this.y = y;
+      this.color = color;
+      this.alpha = 1.0;
+      this.scale = 1.5;
+    }
+
+    update() {
+      this.y -= 1;
+      this.alpha -= 0.025;
+      if (this.scale > 1.0) this.scale -= 0.05;
+    }
+
+    draw() {
+      if (this.alpha <= 0) return;
+      ctx.save();
+      ctx.globalAlpha = this.alpha;
+      ctx.fillStyle = this.color;
+      ctx.font = `bold ${Math.floor(26 * this.scale)}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.shadowColor = 'black';
+      ctx.shadowBlur = 4;
+      ctx.fillText(this.text, this.x, this.y);
+      ctx.restore();
+    }
+  }
+
+  // --- 画面遷移コントロール ---
+  function showTitleScreen() {
+    gameState = 'START';
+    renderRankings();
+    titleScreen.style.display = 'flex';
+    gameoverScreen.style.display = 'none';
+    overlay.style.display = 'flex';
+  }
+
+  function startGame() {
+    playerNameInput.blur(); 
+    currentPlayerName = playerNameInput.value.trim() || "名無し";
+
+    score = 0;
+    combo = 0;
+    lives = MAX_LIFE;
+    currentLevel = 1;
+    levelTimer = 0;
+    items = [];
+    popups = [];
+    spawnTimer = 0;
+    spawnInterval = 180; 
+    
+    windTimer = 0;
+    nextWindInterval = Math.floor(180 + Math.random() * 120);
+    windDuration = 0;
+    isWindy = false;
+
+    updateUI();
+    gameState = 'PLAYING';
+    overlay.style.display = 'none';
+  }
+
+  function gameOver() {
+    // 既にゲームオーバーなら重複処理しない
+    if (gameState === 'GAMEOVER') return;
+    gameState = 'GAMEOVER';
+    
+    saveRanking(currentPlayerName, score);
+    finalScoreValue.innerText = score;
+    
+    titleScreen.style.display = 'none';
+    gameoverScreen.style.display = 'flex';
+    overlay.style.display = 'flex';
+  }
+
+  function updateUI() {
+    scoreEl.innerText = score;
+    lifeEl.innerText = '❤️'.repeat(Math.max(0, lives)) + '🖤'.repeat(Math.max(0, MAX_LIFE - lives));
+    levelEl.innerText = currentLevel;
+    const remainingTime = Math.ceil((1800 - levelTimer) / 60);
+    nextLevelEl.innerText = remainingTime > 0 ? remainingTime : 0;
+  }
+
+  function slash() {
+    if (gameState !== 'PLAYING') return;
+
+    slashLine = { y: TARGET_Y, alpha: 1.0 };
+    let hit = false;
+
+    for (let item of items) {
+      if (item.cut) continue;
+
+      const dist = Math.abs(item.y - TARGET_Y);
+
+      if (dist < TARGET_HEIGHT) {
+        hit = true;
+
+        if (item.type === 'bomb') {
+          popups.push(new PopupText('BOOM!! 爆発！', item.x, item.y, '#ff0000'));
+          gameOver();
+          return;
+        }
+
+        item.cut = true;
+        item.pieces = [
+          { x: item.x - 8, y: item.y, vx: -3 - Math.random() * 2, vy: -3, rotation: 0, vRot: -0.2, startAngle: Math.PI / 2, endAngle: Math.PI * 1.5, alpha: 1 },
+          { x: item.x + 8, y: item.y, vx: 3 + Math.random() * 2, vy: -3, rotation: 0, vRot: 0.2, startAngle: -Math.PI / 2, endAngle: Math.PI / 2, alpha: 1 }
+        ];
+
+        const baseBonus = item.type === 'stick' ? 200 : 0;
+
+        if (dist < 12) {
+          addScore(300 + baseBonus, 'PERFECT!!', '#7efc00', item.x, item.y);
+        } else if (dist < 30) {
+          addScore(150 + baseBonus, 'GREAT!', '#ffeb3b', item.x, item.y);
+        } else {
+          addScore(50 + baseBonus, 'GOOD', '#00e5ff', item.x, item.y);
+        }
+        break;
+      }
+    }
+
+    if (!hit) {
+      combo = 0;
+      popups.push(new PopupText('空振り！', canvas.width / 2, TARGET_Y - 20, '#ff9800'));
+    }
+  }
+
+  function addScore(basePts, text, color, x, y) {
+    combo++;
+    const pts = basePts + (combo > 1 ? combo * 10 : 0);
+    score += pts;
+    popups.push(new PopupText(`${text} ${combo > 1 ? combo + 'Combo!' : ''}`, x, y - 20, color));
+    updateUI();
+  }
+
+  function miss(x, y) {
+    // プレイ中以外（すでにゲームオーバー等の場合）はミス処理を行わない
+    if (gameState !== 'PLAYING') return;
+
+    combo = 0;
+    lives--;
+    popups.push(new PopupText('MISS...', x, y, '#ff4444'));
+    updateUI();
+
+    if (lives <= 0) {
+      gameOver();
+    }
+  }
+
+  function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (isWindy) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 5; i++) {
+        let y = (Date.now() / 2 + i * 150) % canvas.height;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y + 40);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 68, 68, 0.15)';
+    ctx.fillRect(0, TARGET_Y - TARGET_HEIGHT / 2, canvas.width, TARGET_HEIGHT);
+    
+    ctx.strokeStyle = 'rgba(255, 68, 68, 0.8)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.moveTo(0, TARGET_Y);
+    ctx.lineTo(canvas.width, TARGET_Y);
+    ctx.stroke();
+    ctx.restore();
+
+    if (gameState === 'PLAYING') {
+      levelTimer++;
+      if (levelTimer >= 1800) {
+        levelTimer = 0;
+        currentLevel++;
+        popups.push(new PopupText(`LEVEL UP! (LV.${currentLevel})`, canvas.width / 2, canvas.height / 2, '#7efc00'));
+        
+        if (currentLevel === 2) spawnInterval = 110;
+        else if (currentLevel === 3) spawnInterval = 80;
+        else if (spawnInterval > 40) spawnInterval -= 10;
+      }
+      updateUI();
+
+      if (currentLevel >= 3) {
+        if (!isWindy) {
+          windTimer++;
+          if (windTimer >= nextWindInterval) {
+            isWindy = true;
+            windTimer = 0;
+            windDuration = 150; 
+            popups.push(new PopupText('🌪 強風発生！', canvas.width / 2, 200, '#00e5ff'));
+          }
+        } else {
+          windDuration--;
+          if (windDuration <= 0) {
+            isWindy = false;
+            nextWindInterval = Math.floor(180 + Math.random() * 120);
+          }
+        }
+      }
+
+      spawnTimer++;
+      if (spawnTimer >= spawnInterval) {
+        items.push(new FallingItem(currentLevel, isWindy));
+        spawnTimer = 0;
+      }
+    }
+
+    for (let i = items.length - 1; i >= 0; i--) {
+      let item = items[i];
+      item.update();
+      item.draw();
+
+      if (!item.cut && item.y > TARGET_Y + TARGET_HEIGHT / 2 + 20) {
+        if (item.type !== 'bomb') {
+          miss(item.x, TARGET_Y);
+        }
+        items.splice(i, 1);
+        continue;
+      }
+
+      if (item.cut && item.pieces.every(p => p.alpha <= 0)) {
+        items.splice(i, 1);
+      }
+    }
+
+    if (slashLine) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 255, 255, ${slashLine.alpha})`;
+      ctx.lineWidth = 8;
+      ctx.shadowColor = '#7efc00';
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.moveTo(0, slashLine.y);
+      ctx.lineTo(canvas.width, slashLine.y);
+      ctx.stroke();
+      ctx.restore();
+
+      slashLine.alpha -= 0.15;
+      if (slashLine.alpha <= 0) slashLine = null;
+    }
+
+    for (let i = popups.length - 1; i >= 0; i--) {
+      let p = popups[i];
+      p.update();
+      p.draw();
+      if (p.alpha <= 0) popups.splice(i, 1);
+    }
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  // --- イベントリスナー ---
+  window.addEventListener('keydown', (e) => {
+    if (document.activeElement === playerNameInput) return;
+
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (gameState === 'PLAYING') {
+        slash();
+      } else if (gameState === 'START') {
+        startGame();
+      } else if (gameState === 'GAMEOVER') {
+        showTitleScreen();
+      }
+    }
+  });
+
+  const container = document.getElementById('game-container');
+  container.addEventListener('pointerdown', (e) => {
+    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+    
+    if (gameState === 'PLAYING') {
+      slash();
+    }
+  });
+
+  startBtn.addEventListener('click', startGame);
+  backTitleBtn.addEventListener('click', showTitleScreen);
+
+  gameLoop();
+</script>
+
+</body>
+</html>

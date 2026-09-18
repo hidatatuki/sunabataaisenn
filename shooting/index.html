@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 昔懐かしの縁日射的屋 - ビジュアル超強化版</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        .overlay-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 5, 2, 0.92);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            color: #fff;
+            text-align: center;
+        }
+
+        .overlay-screen h1 {
+            font-size: 42px;
+            color: #ffd700;
+            text-shadow: 3px 3px 6px #000, 0 0 15px #ff0000;
+            letter-spacing: 6px;
+            margin-bottom: 10px;
+        }
+
+        .overlay-screen p {
+            font-size: 15px;
+            color: #ddd;
+            margin-bottom: 25px;
+            line-height: 1.8;
+        }
+
+        .result-board {
+            width: 420px;
+            background: rgba(30, 15, 8, 0.9);
+            border: 3px solid #ffd700;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+            margin-bottom: 20px;
+        }
+
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+            color: #fff;
+            font-size: 16px;
+        }
+
+        .result-table th {
+            border-bottom: 2px solid #8b5a2b;
+            padding: 8px;
+            color: #ffd700;
+        }
+
+        .result-table td {
+            padding: 8px;
+            border-bottom: 1px dashed #5c3a21;
+        }
+
+        .total-score {
+            font-size: 28px;
+            color: #ffd700;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px #000;
+            border-top: 2px solid #ffd700;
+            padding-top: 10px;
+        }
+
+        .main-btn {
+            background: linear-gradient(180deg, #d9534f 0%, #c9302c 100%);
+            color: white;
+            border: 2px solid #ffd700;
+            padding: 12px 35px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(217, 83, 79, 0.6);
+            transition: all 0.2s;
+        }
+        .main-btn:hover {
+            transform: scale(1.05);
+            background: linear-gradient(180deg, #ec971f 0%, #c9302c 100%);
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        header {
+            background: linear-gradient(180deg, rgba(139,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #fff;
+        }
+
+        .status-container {
+            display: flex;
+            gap: 20px;
+        }
+
+        .status-box {
+            font-size: 20px;
+            font-weight: bold;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px 20px;
+            border-radius: 8px;
+            border: 2px solid #ffd700;
+            color: #fff;
+        }
+
+        #log-box {
+            position: absolute;
+            right: 20px;
+            top: 90px;
+            width: 200px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #8b5a2b;
+            border-radius: 8px;
+            padding: 12px;
+            color: #ffd700;
+            font-size: 14px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        footer {
+            padding: 15px;
+            text-align: center;
+            background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+            color: #ccc;
+            font-size: 14px;
+        }
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+</head>
+<body>
+
+    <div id="start-screen" class="overlay-screen">
+        <h1>縁日射的屋 3D</h1>
+        <p>
+            【操作方法】<br>
+            ・マウス移動：銃の向きを変更（ポインターロック）<br>
+            ・右クリック長押し：照準を覗き込む（ADS）<br>
+            ・左クリック：コルク弾を発射！<br>
+            ・ESCキー：ポインターロック解除
+        </p>
+        <button class="main-btn" onclick="startGame()">店に入り（ゲーム開始）</button>
+    </div>
+
+    <div id="result-screen" class="overlay-screen" style="display: none;">
+        <h1>結果発表</h1>
+        <div class="result-board">
+            <table class="result-table">
+                <thead>
+                    <tr>
+                        <th style="text-align: left;">獲得した景品</th>
+                        <th>単価</th>
+                        <th>個数</th>
+                        <th style="text-align: right;">小計</th>
+                    </tr>
+                </thead>
+                <tbody id="result-tbody"></tbody>
+            </table>
+            <div class="total-score">総合得点: <span id="final-score">0</span> 点</div>
+        </div>
+        <button class="main-btn" onclick="resetGame()">もう一度遊ぶ</button>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <header>
+            <h2 style="margin:0; color:#ffd700;">縁日射的屋</h2>
+            <div class="status-container">
+                <div class="status-box">玉数: <span id="bullets">10</span></div>
+                <div class="status-box">得点: <span id="score">0</span></div>
+            </div>
+        </header>
+
+        <div id="log-box">
+            <h3 style="margin:0 0 8px 0; font-size:14px; color:#fff; border-bottom:1px solid #8b5a2b;">獲得した景品</h3>
+            <div id="log-list"></div>
+        </div>
+
+        <footer>
+            左クリック：射撃 ｜ 右クリック保持：照準を覗く ｜ コルク弾制限：10発
+        </footer>
+    </div>
+
+    <script>
+        let scene, camera, renderer, world;
+        let score = 0, bullets = 10;
+        let targets = [], corks = [], smokeParticles = [];
+        let targetMeshes = [];
+        let gunGroup;
+        let isAiming = false;
+        let audioCtx;
+        let isGameStarted = false;
+        let lastTime = performance.now();
+        let raycaster = new THREE.Raycaster();
+
+        let defaultMaterial, corkMaterial, targetMaterial;
+
+        const normalGunPos = new THREE.Vector3(0.2, -0.25, -0.4);
+        const aimGunPos = new THREE.Vector3(0, -0.050, -0.2);
+
+        let pitch = 0, yaw = 0;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playCorkPopSound() {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.08);
+
+            gain.gain.setValueAtTime(1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.08);
+        }
+
+        function playHitSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(250, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.05);
+
+            gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.05);
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x0a0502, 0.03);
+
+            // カメラ位置調整（立ち位置から棚までの「絶妙な距離感」を創出）
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 100);
+            camera.position.set(0, 1.25, 1.7);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            world = new CANNON.World();
+            world.gravity.set(0, -9.82, 0);
+
+            defaultMaterial = new CANNON.Material("default");
+            corkMaterial = new CANNON.Material("cork");
+            targetMaterial = new CANNON.Material("target");
+
+            const contactMaterial = new CANNON.ContactMaterial(corkMaterial, targetMaterial, {
+                friction: 0.5,
+                restitution: 0.2
+            });
+            world.addContactMaterial(contactMaterial);
+
+            // 照明の調整：レトロな屋台の暖色スポットライト
+            const ambientLight = new THREE.AmbientLight(0xffdfb3, 0.6);
+            scene.add(ambientLight);
+
+            const mainLight = new THREE.SpotLight(0xffa040, 2.5);
+            mainLight.position.set(0, 3.2, 0.8);
+            mainLight.angle = Math.PI / 3;
+            mainLight.penumbra = 0.8;
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 1024;
+            mainLight.shadow.mapSize.height = 1024;
+            scene.add(mainLight);
+
+            createStall();
+            createGun();
+            spawnTargets();
+
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mousedown', onMouseDown);
+            document.addEventListener('mouseup', onMouseUp);
+            document.addEventListener('contextmenu', e => e.preventDefault());
+
+            animate();
+        }
+
+        function createGun() {
+            gunGroup = new THREE.Group();
+
+            const woodMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.7 });
+            const metalMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.3 });
+            const brassMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9, roughness: 0.1 });
+
+            const stock = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, 0.35), woodMat);
+            stock.position.set(0, -0.02, 0.15);
+            stock.rotation.x = -0.1;
+            gunGroup.add(stock);
+
+            const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.05, 0.15), metalMat);
+            receiver.position.set(0, 0.01, -0.05);
+            gunGroup.add(receiver);
+
+            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 16), metalMat);
+            barrel.rotation.x = Math.PI / 2;
+            barrel.position.set(0, 0.02, -0.32);
+            gunGroup.add(barrel);
+
+            const pump = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.2, 16), woodMat);
+            pump.rotation.x = Math.PI / 2;
+            pump.position.set(0, 0, -0.28);
+            gunGroup.add(pump);
+
+            const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.016, 0.004), brassMat);
+            frontSight.position.set(0, 0.042, -0.55);
+            gunGroup.add(frontSight);
+
+            const rearLeft = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.012, 0.006), brassMat);
+            rearLeft.position.set(-0.004, 0.040, -0.08);
+            gunGroup.add(rearLeft);
+
+            const rearRight = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.012, 0.006), brassMat);
+            rearRight.position.set(0.004, 0.040, -0.08);
+            gunGroup.add(rearRight);
+
+            gunGroup.position.copy(normalGunPos);
+            camera.add(gunGroup);
+            scene.add(camera);
+        }
+
+        function createStall() {
+            const woodMat = new THREE.MeshStandardMaterial({ color: 0x3d2010, roughness: 0.8 });
+            const redClothMat = new THREE.MeshStandardMaterial({ color: 0x8b0000, roughness: 0.7 });
+
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(5, 3.5, 0.1), new THREE.MeshStandardMaterial({ color: 0x180a04 }));
+            backWall.position.set(0, 1.5, -1.8);
+            scene.add(backWall);
+
+            const counter = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.8, 0.6), redClothMat);
+            counter.position.set(0, 0.4, 0.8);
+            counter.receiveShadow = true;
+            scene.add(counter);
+
+            // 棚の位置調整（Z軸奥方向に引いて本格的な射的の「遠さ」を演出）
+            const shelf1Height = 0.85;
+            const shelf2Height = 1.30;
+            const shelfZ = -0.8;
+
+            const shelf1 = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.03, 0.28), woodMat);
+            shelf1.position.set(0, shelf1Height, shelfZ);
+            shelf1.castShadow = true;
+            shelf1.receiveShadow = true;
+            scene.add(shelf1);
+            createStaticBox(new THREE.Vector3(2.6, 0.03, 0.28), new THREE.Vector3(0, shelf1Height - 0.015, shelfZ));
+
+            const shelf2 = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.03, 0.28), woodMat);
+            shelf2.position.set(0, shelf2Height, shelfZ);
+            shelf2.castShadow = true;
+            shelf2.receiveShadow = true;
+            scene.add(shelf2);
+            createStaticBox(new THREE.Vector3(2.6, 0.03, 0.28), new THREE.Vector3(0, shelf2Height - 0.015, shelfZ));
+        }
+
+        function createStaticBox(size, pos) {
+            const shape = new CANNON.Box(new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2));
+            const body = new CANNON.Body({ mass: 0, material: defaultMaterial });
+            body.addShape(shape);
+            body.position.copy(pos);
+            world.addBody(body);
+        }
+
+        const ITEM_TYPES = [
+            { name: "けん玉", color: 0xd9534f, pts: 50, type: "kendama", mass: 0.08, w: 0.12, h: 0.22, d: 0.12 },
+            { name: "ラムネ", color: 0x46b8da, pts: 30, type: "ramune", mass: 0.07, w: 0.08, h: 0.22, d: 0.08 },
+            { name: "小判", color: 0xf0ad4e, pts: 10, type: "menko", mass: 0.05, w: 0.09, h: 0.05, d: 0.09 },
+            { name: "水鉄砲", color: 0x5cb85c, pts: 40, type: "gun", mass: 0.09, w: 0.16, h: 0.14, d: 0.10 },
+            { name: "こま", color: 0x9b59b6, pts: 20, type: "top", mass: 0.08, w: 0.12, h: 0.12, d: 0.12 }
+        ];
+
+        function spawnTargets() {
+            const shelf1Top = 0.865;
+            const shelf2Top = 1.315;
+            const shelfZ = -0.8;
+
+            const positions = [
+                // 下段棚（5個）
+                { x: -0.85, shelfY: shelf1Top, z: shelfZ, item: ITEM_TYPES[0] }, // けん玉
+                { x: -0.42, shelfY: shelf1Top, z: shelfZ, item: ITEM_TYPES[2] }, // 小判
+                { x:  0.00, shelfY: shelf1Top, z: shelfZ, item: ITEM_TYPES[1] }, // ラムネ
+                { x:  0.42, shelfY: shelf1Top, z: shelfZ, item: ITEM_TYPES[4] }, // こま
+                { x:  0.85, shelfY: shelf1Top, z: shelfZ, item: ITEM_TYPES[3] }, // 水鉄砲
+
+                // 上段棚（4個）
+                { x: -0.63, shelfY: shelf2Top, z: shelfZ, item: ITEM_TYPES[1] }, // ラムネ
+                { x: -0.21, shelfY: shelf2Top, z: shelfZ, item: ITEM_TYPES[0] }, // けん玉
+                { x:  0.21, shelfY: shelf2Top, z: shelfZ, item: ITEM_TYPES[2] }, // 小判
+                { x:  0.63, shelfY: shelf2Top, z: shelfZ, item: ITEM_TYPES[4] }  // こま
+            ];
+
+            targetMeshes = [];
+
+            positions.forEach(pos => {
+                const targetY = pos.shelfY + (pos.item.h / 2) + 0.002;
+                createTargetMeshAndBody(pos.item, pos.x, targetY, pos.z);
+            });
+        }
+
+        // --- ★景品（的）のデザイン完全立体・質感強化処理 ---
+        function createTargetMeshAndBody(item, x, y, z) {
+            let mesh = new THREE.Group();
+            let shape;
+
+            if (item.type === "ramune") {
+                // 【リアルなラムネ瓶】ガラス質感＋くびれ＋ビー玉構造
+                const glassMat = new THREE.MeshPhysicalMaterial({ 
+                    color: 0x88e0ef, 
+                    roughness: 0.1, 
+                    transmission: 0.85, 
+                    transparent: true,
+                    thickness: 0.05
+                });
+                const bodyMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.035, 0.14, 16), glassMat);
+                bodyMesh.position.y = -0.03;
+                
+                const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.028, 0.06, 16), glassMat);
+                neckMesh.position.y = 0.06;
+
+                const capMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.02, 16), new THREE.MeshStandardMaterial({ color: 0xcc0000 }));
+                capMesh.position.y = 0.095;
+
+                const marbleMesh = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 12), new THREE.MeshStandardMaterial({ color: 0x00ffff, roughness: 0.1 }));
+                marbleMesh.position.y = 0.05;
+
+                mesh.add(bodyMesh); mesh.add(neckMesh); mesh.add(capMesh); mesh.add(marbleMesh);
+                shape = new CANNON.Box(new CANNON.Vec3(0.04, 0.11, 0.04));
+
+            } else if (item.type === "menko") {
+                // 【リアルな小判】金の金属感＋刻印テクスチャ模様
+                const canvas = document.createElement('canvas');
+                canvas.width = 128; canvas.height = 128;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffcc00'; ctx.fillRect(0, 0, 128, 128);
+                ctx.strokeStyle = '#aa7700'; ctx.lineWidth = 6;
+                for(let i=10; i<120; i+=16) {
+                    ctx.beginPath(); ctx.moveTo(10, i); ctx.lineTo(118, i); ctx.stroke();
+                }
+                const kobanTex = new THREE.CanvasTexture(canvas);
+
+                const kobanMat = new THREE.MeshStandardMaterial({ 
+                    color: 0xffd700, 
+                    metalness: 0.8, 
+                    roughness: 0.2,
+                    map: kobanTex
+                });
+
+                const kobanMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.04, 24), kobanMat);
+                kobanMesh.scale.set(1, 1, 0.6); // 楕円型に圧縮
+                mesh.add(kobanMesh);
+                shape = new CANNON.Box(new CANNON.Vec3(0.045, 0.025, 0.03));
+
+            } else if (item.type === "kendama") {
+                // 【リアルなけん玉】大皿・小皿・中皿・剣先・玉の造形
+                const woodMat = new THREE.MeshStandardMaterial({ color: 0xd2b48c, roughness: 0.6 });
+                const ballMat = new THREE.MeshStandardMaterial({ color: item.color, roughness: 0.3, metalness: 0.1 });
+
+                const ken = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.015, 0.16, 12), woodMat);
+                const saraGroup = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 12), woodMat);
+                saraGroup.rotation.z = Math.PI / 2;
+                saraGroup.position.y = 0.03;
+
+                const ball = new THREE.Mesh(new THREE.SphereGeometry(0.04, 16, 16), ballMat);
+                ball.position.y = 0.085;
+
+                mesh.add(ken); mesh.add(saraGroup); mesh.add(ball);
+                shape = new CANNON.Box(new CANNON.Vec3(0.05, 0.11, 0.05));
+
+            } else if (item.type === "gun") {
+                // 【リアルな水鉄砲（緑）】タンク・グリップ・銃口がついた立体構造
+                const plasticMat = new THREE.MeshStandardMaterial({ color: 0x2ecc71, roughness: 0.3, metalness: 0.1 });
+                const tankMat = new THREE.MeshStandardMaterial({ color: 0x3498db, roughness: 0.2, transparent: true, opacity: 0.85 });
+
+                const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.04, 0.04), plasticMat);
+                body.position.y = 0.02;
+
+                const handle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.08, 0.03), plasticMat);
+                handle.position.set(-0.03, -0.03, 0);
+                handle.rotation.z = -0.2;
+
+                const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.12, 12), tankMat);
+                tank.rotation.z = Math.PI / 2;
+                tank.position.set(0, 0.05, 0);
+
+                mesh.add(body); mesh.add(handle); mesh.add(tank);
+                shape = new CANNON.Box(new CANNON.Vec3(0.08, 0.07, 0.04));
+
+            } else if (item.type === "top") {
+                // 【リアルなこま】すり鉢型の回転体＋カラフルリング
+                const topMat1 = new THREE.MeshStandardMaterial({ color: item.color, roughness: 0.5 });
+                const topMat2 = new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: 0.5 });
+
+                const cone = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.08, 16), topMat1);
+                cone.rotation.x = Math.PI;
+
+                const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.02, 16), topMat2);
+                ring.position.y = 0.02;
+
+                const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.03, 8), new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.9 }));
+                tip.position.y = -0.045;
+
+                mesh.add(cone); mesh.add(ring); mesh.add(tip);
+                shape = new CANNON.Box(new CANNON.Vec3(0.05, 0.06, 0.05));
+            }
+
+            // シャドウ適用
+            mesh.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+
+            mesh.position.set(x, y, z);
+            scene.add(mesh);
+
+            const body = new CANNON.Body({ 
+                mass: item.mass, 
+                position: new CANNON.Vec3(x, y, z),
+                material: targetMaterial
+            });
+            body.addShape(shape);
+            body.allowSleep = false;
+            world.addBody(body);
+
+            const targetObj = { mesh: mesh, body: body, item: item, hit: false, initialY: y };
+            targets.push(targetObj);
+
+            mesh.userData = { targetObj: targetObj };
+            targetMeshes.push(mesh);
+        }
+
+        function onMouseMove(event) {
+            if (!isGameStarted || document.pointerLockElement !== document.body) return;
+
+            const sensitivity = isAiming ? 0.001 : 0.0022;
+
+            yaw -= event.movementX * sensitivity;
+            pitch -= event.movementY * sensitivity;
+
+            pitch = Math.max(-Math.PI / 6, Math.min(Math.PI / 6, pitch));
+            yaw = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, yaw));
+
+            camera.rotation.set(pitch, yaw, 0, 'YXZ');
+        }
+
+        function onMouseDown(event) {
+            if (!isGameStarted) return;
+
+            if (event.button === 0) shootCork();
+            if (event.button === 2) isAiming = true;
+        }
+
+        function onMouseUp(event) {
+            if (event.button === 2) isAiming = false;
+        }
+
+        function spawnSmoke(pos) {
+            const geo = new THREE.SphereGeometry(0.013, 6, 6);
+            const mat = new THREE.MeshBasicMaterial({
+                color: 0x8b5a2b,
+                transparent: true,
+                opacity: 0.75
+            });
+            const p = new THREE.Mesh(geo, mat);
+            p.position.copy(pos);
+            scene.add(p);
+            smokeParticles.push({ mesh: p, life: 1.0 });
+        }
+
+        function shootCork() {
+            if (bullets <= 0) return;
+
+            bullets--;
+            updateUI();
+            playCorkPopSound();
+
+            const corkMat = new THREE.MeshStandardMaterial({ 
+                color: 0xd2b48c, 
+                roughness: 0.4,
+                metalness: 0.1,
+                emissive: 0x332211
+            });
+
+            const corkMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.012, 0.04, 12), corkMat);
+            corkMesh.castShadow = true;
+            scene.add(corkMesh);
+
+            const shootDir = new THREE.Vector3(0, 0, -1);
+            shootDir.applyQuaternion(camera.quaternion);
+
+            const shootPos = camera.position.clone().add(shootDir.clone().multiplyScalar(0.35));
+
+            const corkShape = new CANNON.Sphere(0.03); 
+            const corkBody = new CANNON.Body({ 
+                mass: 0.35,
+                position: new CANNON.Vec3(shootPos.x, shootPos.y, shootPos.z),
+                linearDamping: 0.01,
+                material: corkMaterial
+            });
+            corkBody.addShape(corkShape);
+
+            const speed = 25;
+            const velocity = new CANNON.Vec3(shootDir.x * speed, shootDir.y * speed, shootDir.z * speed);
+            corkBody.velocity.copy(velocity);
+            world.addBody(corkBody);
+
+            // レイキャスト判定（100%すり抜け防止維持）
+            raycaster.set(shootPos, shootDir);
+            const intersects = raycaster.intersectObjects(targetMeshes, true);
+
+            let hitProcessed = false;
+
+            if (intersects.length > 0) {
+                const hitInfo = intersects[0];
+                if (hitInfo.distance < 3.5) {
+                    let hitMesh = hitInfo.object;
+                    while (hitMesh.parent && !hitMesh.userData.targetObj) {
+                        hitMesh = hitMesh.parent;
+                    }
+
+                    const targetObj = hitMesh.userData.targetObj;
+                    if (targetObj) {
+                        hitProcessed = true;
+                        playHitSound();
+
+                        const impulseVector = new CANNON.Vec3(
+                            shootDir.x * 0.8,
+                            shootDir.y * 0.8 + 0.1,
+                            shootDir.z * 0.8
+                        );
+                        const hitPoint = new CANNON.Vec3(hitInfo.point.x, hitInfo.point.y, hitInfo.point.z);
+                        targetObj.body.applyImpulse(impulseVector, hitPoint);
+                    }
+                }
+            }
+
+            corks.push({ mesh: corkMesh, body: corkBody, time: 0, hitDone: hitProcessed });
+
+            if (!hitProcessed) {
+                corkBody.addEventListener('collide', () => {
+                    playHitSound();
+                });
+            }
+
+            if (bullets === 0) {
+                setTimeout(() => {
+                    showResult();
+                }, 1500);
+            }
+        }
+
+        function showResult() {
+            isGameStarted = false;
+            document.exitPointerLock();
+
+            const summary = {};
+
+            targets.forEach(t => {
+                if (t.hit) {
+                    const name = t.item.name;
+                    if (!summary[name]) {
+                        summary[name] = { pts: t.item.pts, count: 0 };
+                    }
+                    summary[name].count++;
+                }
+            });
+
+            const tbody = document.getElementById('result-tbody');
+            tbody.innerHTML = '';
+
+            const keys = Object.keys(summary);
+            if (keys.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#aaa;">残念！何も取れませんでした</td></tr>';
+            } else {
+                keys.forEach(name => {
+                    const item = summary[name];
+                    const subtotal = item.pts * item.count;
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="text-align: left;">${name}</td>
+                        <td>${item.pts}pt</td>
+                        <td>${item.count}個</td>
+                        <td style="text-align: right; color:#ffd700;">${subtotal}pt</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            document.getElementById('final-score').textContent = score;
+            document.getElementById('result-screen').style.display = 'flex';
+        }
+
+        function startGame() {
+            initAudio();
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('result-screen').style.display = 'none';
+            isGameStarted = true;
+
+            document.body.requestPointerLock();
+
+            document.body.addEventListener('click', () => {
+                if (isGameStarted && document.pointerLockElement !== document.body) {
+                    document.body.requestPointerLock();
+                }
+            });
+        }
+
+        function resetGame() {
+            targets.forEach(t => {
+                scene.remove(t.mesh);
+                world.remove(t.body);
+            });
+            targets = [];
+            targetMeshes = [];
+
+            corks.forEach(c => {
+                scene.remove(c.mesh);
+                world.remove(c.body);
+            });
+            corks = [];
+
+            smokeParticles.forEach(p => scene.remove(p.mesh));
+            smokeParticles = [];
+
+            score = 0;
+            bullets = 10;
+            document.getElementById('log-list').innerHTML = '';
+            updateUI();
+
+            spawnTargets();
+            startGame();
+        }
+
+        function checkScores() {
+            targets.forEach(t => {
+                if (!t.hit) {
+                    const fallen = t.body.position.y < (t.initialY - 0.05);
+                    const tilted = Math.abs(t.body.quaternion.x) > 0.25 || Math.abs(t.body.quaternion.z) > 0.25;
+
+                    if (fallen || tilted) {
+                        t.hit = true;
+                        score += t.item.pts;
+                        updateUI();
+
+                        const logList = document.getElementById('log-list');
+                        const entry = document.createElement('div');
+                        entry.style.marginBottom = "4px";
+                        entry.textContent = `・${t.item.name} (${t.item.pts}pt)`;
+                        logList.appendChild(entry);
+                    }
+                }
+            });
+        }
+
+        function updateUI() {
+            document.getElementById('bullets').textContent = bullets;
+            document.getElementById('score').textContent = score;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const now = performance.now();
+            const delta = Math.min((now - lastTime) / 1000, 0.1);
+            lastTime = now;
+
+            world.step(1 / 60, delta, 5);
+
+            const targetPos = isAiming ? aimGunPos : normalGunPos;
+            gunGroup.position.lerp(targetPos, 0.2);
+
+            for (let i = corks.length - 1; i >= 0; i--) {
+                let c = corks[i];
+                c.mesh.position.copy(c.body.position);
+                c.mesh.quaternion.copy(c.body.quaternion);
+                c.time += delta;
+
+                if (c.time < 1.0) {
+                    spawnSmoke(c.mesh.position);
+                }
+
+                if (c.time > 2.0) {
+                    scene.remove(c.mesh);
+                    world.remove(c.body);
+                    corks.splice(i, 1);
+                }
+            }
+
+            for (let i = smokeParticles.length - 1; i >= 0; i--) {
+                let p = smokeParticles[i];
+                p.life -= 0.035;
+                p.mesh.material.opacity = p.life * 0.75;
+                p.mesh.scale.multiplyScalar(0.96);
+
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    smokeParticles.splice(i, 1);
+                }
+            }
+
+            targets.forEach(t => {
+                t.mesh.position.copy(t.body.position);
+                t.mesh.quaternion.copy(t.body.quaternion);
+            });
+
+            checkScores();
+            renderer.render(scene, camera);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
