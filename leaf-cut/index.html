@@ -13,7 +13,7 @@
     body {
       margin: 0;
       padding: 0;
-      background: #0d1c26;
+      background: #1a261a;
       color: #fff;
       font-family: "Helvetica Neue", Arial, sans-serif;
       display: flex;
@@ -27,30 +27,18 @@
       width: min(92vw, 600px);
       height: min(82vh, 800px);
       max-height: 92vh;
-      background-image: url('./background-underwater.jpg');
-      background-size: cover;
-      background-position: center;
-      border: 4px solid rgba(126, 252, 0, 0.8);
+      background: linear-gradient(to bottom, #2d4a3e, #132018);
+      border: 4px solid #4a7c59;
       border-radius: 12px;
       overflow: hidden;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
       touch-action: none;
-    }
-    #game-container::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(to bottom, rgba(4, 18, 28, 0.18), rgba(4, 18, 28, 0.42));
-      pointer-events: none;
-      z-index: 0;
     }
     canvas {
       display: block;
       width: 100%;
       height: 100%;
       touch-action: none;
-      position: relative;
-      z-index: 1;
     }
     .ui-layer {
       position: absolute;
@@ -63,7 +51,6 @@
       flex-direction: column;
       justify-content: space-between;
       padding: 20px;
-      z-index: 2;
     }
     .stats {
       display: flex;
@@ -81,7 +68,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(4, 18, 28, 0.62);
+      background: rgba(0, 0, 0, 0.85);
       display: flex;
       flex-direction: column;
       justify-content: center;
