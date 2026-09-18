@@ -130,7 +130,7 @@
             renderer.render(scene, camera);
         }
 
-        // イルカモデル：武骨な角ばった形を、流線型の海獣に近づける
+        // イルカの本体は、実際の動物のような細長い輪郭にする
         function createDolphinModel(color) {
             const group = new THREE.Group();
             const bodyMat = new THREE.MeshPhongMaterial({
@@ -140,58 +140,64 @@
                 emissive: 0x0c2a49
             });
 
-            const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.72, 3.2, 6, 20), bodyMat);
+            // 胴体：やや扁平で先細りの流線型
+            const bodyGeo = new THREE.SphereGeometry(1.0, 28, 24);
+            bodyGeo.scale(3.4, 1.1, 1.55);
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
             body.rotation.z = Math.PI / 2;
-            body.scale.set(1.4, 1.0, 1.2);
             group.add(body);
 
-            const head = new THREE.Mesh(new THREE.SphereGeometry(0.78, 24, 20), bodyMat);
-            head.scale.set(1.4, 1.0, 1.2);
-            head.position.set(1.9, 0.05, 0);
-            group.add(head);
+            // 顔の前にある鼻先を細くして、実際のイルカ寄りにする
+            const forehead = new THREE.Mesh(new THREE.SphereGeometry(0.82, 18, 18), bodyMat);
+            forehead.scale.set(1.5, 1.1, 1.0);
+            forehead.position.set(2.15, 0.03, 0);
+            group.add(forehead);
 
-            const snout = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.4, 18), bodyMat);
+            const snout = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.7, 20), bodyMat);
             snout.rotation.z = -Math.PI / 2;
-            snout.position.set(2.9, 0.05, 0);
+            snout.position.set(3.25, 0.02, 0);
             group.add(snout);
 
-            const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.0, 18), bodyMat);
+            // 背びれを小さくして、頭と胴体に自然につながるようにする
+            const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.32, 1.1, 20), bodyMat);
             dorsal.rotation.z = -Math.PI / 2;
-            dorsal.position.set(0.4, 0.9, 0);
+            dorsal.position.set(0.3, 1.0, 0);
             group.add(dorsal);
 
-            const leftFin = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.1, 18), bodyMat);
+            // 側びれは薄く、自然に長くひらくようにする
+            const leftFin = new THREE.Mesh(new THREE.ConeGeometry(0.32, 1.25, 18), bodyMat);
             leftFin.rotation.z = -Math.PI / 2;
-            leftFin.rotation.y = -Math.PI / 8;
-            leftFin.position.set(0.1, -0.6, 0.95);
+            leftFin.rotation.x = Math.PI / 7;
+            leftFin.rotation.y = -Math.PI / 10;
+            leftFin.position.set(0.1, -0.45, 1.1);
             group.add(leftFin);
 
-            const rightFin = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.1, 18), bodyMat);
+            const rightFin = new THREE.Mesh(new THREE.ConeGeometry(0.32, 1.25, 18), bodyMat);
             rightFin.rotation.z = Math.PI / 2;
-            rightFin.rotation.y = Math.PI / 8;
-            rightFin.position.set(0.1, -0.6, -0.95);
+            rightFin.rotation.x = -Math.PI / 7;
+            rightFin.rotation.y = Math.PI / 10;
+            rightFin.position.set(0.1, -0.45, -1.1);
             group.add(rightFin);
 
-            const peduncle = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.35, 1.5, 16), bodyMat);
+            const peduncle = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.34, 1.3, 16), bodyMat);
             peduncle.rotation.z = Math.PI / 2;
-            peduncle.position.set(-1.8, 0, 0);
+            peduncle.position.set(-2.2, 0, 0);
             group.add(peduncle);
 
             tailFlukeMesh = new THREE.Group();
 
-            const tailLeft = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 16), bodyMat);
+            const tailLeft = new THREE.Mesh(new THREE.ConeGeometry(0.95, 2.0, 18), bodyMat);
             tailLeft.rotation.z = -Math.PI / 2;
-            tailLeft.rotation.y = -Math.PI / 9;
-            tailLeft.position.set(-2.2, 0, 0.8);
+            tailLeft.rotation.y = -Math.PI / 12;
+            tailLeft.position.set(-2.9, 0, 0.9);
             tailFlukeMesh.add(tailLeft);
 
-            const tailRight = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 16), bodyMat);
+            const tailRight = new THREE.Mesh(new THREE.ConeGeometry(0.95, 2.0, 18), bodyMat);
             tailRight.rotation.z = Math.PI / 2;
-            tailRight.rotation.y = Math.PI / 9;
-            tailRight.position.set(-2.2, 0, -0.8);
+            tailRight.rotation.y = Math.PI / 12;
+            tailRight.position.set(-2.9, 0, -0.9);
             tailFlukeMesh.add(tailRight);
 
-            tailFlukeMesh.position.set(0, 0, 0);
             group.add(tailFlukeMesh);
 
             return group;
