@@ -109,6 +109,17 @@
     </div>
 
     <script>
+        const startButton = document.getElementById('start-btn');
+        if (startButton) {
+            startButton.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                startGame();
+            });
+            startButton.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                startGame();
+            }, { passive: false });
+        }
         let scene, camera, renderer;
         let playerDolphin, tailFlukeMesh;
         let trackLength = 10000;
@@ -347,9 +358,16 @@
         }
 
         function handleTouchBoost(e) {
-            if (e && typeof e.preventDefault === 'function') e.preventDefault();
+            if (!e) return;
+
+            const target = e.target;
+            if (target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.closest && (target.closest('button') || target.closest('input')))) {
+                return;
+            }
+
+            if (typeof e.preventDefault === 'function') e.preventDefault();
             tapBoost = true;
-            if (e && (e.pointerType === 'touch' || e.type === 'touchstart')) {
+            if (e.pointerType === 'touch' || e.type === 'touchstart') {
                 touchDragActive = true;
                 lastTouchX = e.clientX || 0;
                 lastTouchY = e.clientY || 0;
