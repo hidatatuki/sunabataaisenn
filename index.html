@@ -67,6 +67,28 @@
       letter-spacing: 0.04em;
     }
 
+    .link-list {
+      list-style: none;
+      padding: 0;
+      margin: 0 0 22px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .link-list a {
+      display: inline-block;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(79, 209, 255, 0.12);
+      border: 1px solid rgba(79, 209, 255, 0.28);
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(260px, 1fr));
@@ -190,6 +212,13 @@
       <h1>ゲーム選択</h1>
       <p>好きなゲームを選んで遊んでください</p>
     </div>
+
+    <ul class="link-list">
+      <li><a href="./sand-battle/index.html">砂場大戦争</a></li>
+      <li><a href="./dolphin/index.html">ドルフィン スコアアタック</a></li>
+      <li><a href="./leaf-cut/index.html">葉切り一閃</a></li>
+      <li><a href="./shooting/index.html">縁日射的屋 3D</a></li>
+    </ul>
 
     <div class="grid">
       <a class="game-card" href="./sand-battle/index.html">
