@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>砂場大戦争 - 決定版</title>
+    <!-- P2P通信用のPeerJSライブラリ -->
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100vw; height: 100vh;
+            overflow: hidden; background-color: #2c3e50; color: #ecf0f1;
+            font-family: sans-serif; user-select: none; -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent; overscroll-behavior: none;
+        }
+        canvas {
+            display: block; background-color: #e0cda9; width: 100vw; height: 100vh;
+            touch-action: none; -ms-touch-action: none;
+        }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; display: none; }
+        .panel { position: absolute; background: rgba(0, 0, 0, 0.7); padding: 10px; border-radius: 8px; pointer-events: auto; }
+        #top-bar { top: 15px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 18px; font-weight: bold; }
+        #player-info { top: 15px; left: 15px; }
+        #enemy-info { top: 15px; right: 15px; text-align: right;}
+        #unit-ui { bottom: 15px; left: 50%; transform: translateX(-50%); display: none; width: 450px; text-align: center; }
+        .btn {
+            background: #3498db; color: white; border: none; padding: 8px 15px; margin: 5px;
+            cursor: pointer; border-radius: 4px; font-weight: bold; touch-action: manipulation;
+        }
+        .btn:hover { background: #2980b9; }
+        .btn:active { background: #1f618d; }
+        
+        #menu-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 10; pointer-events: auto;
+        }
+        .menu-box { background: #34495e; padding: 25px; border-radius: 10px; text-align: center; margin: 10px; width: min(380px, calc(100vw - 26px)); }
+        input[type="text"] { padding: 8px; font-size: 16px; width: 80%; margin-bottom: 10px; border-radius: 4px; border: none; text-align: center; }
+
+        @media (max-width: 480px) {
+            .menu-box { padding: 18px 12px; }
+            h1 { font-size: 28px; }
+            .btn { font-size: 14px; padding: 10px 12px; }
+            #unit-ui { width: min(450px, calc(100vw - 16px)); }
+        }
+
+        #game-over {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); flex-direction: column; justify-content: center; align-items: center; pointer-events: auto; z-index: 5;
+        }
+        h1 { margin: 0; font-size: 36px; }
+    </style>
+</head>
+<body>
+
+    <div id="menu-overlay">
+        <h1 style="color: #f1c40f; margin-bottom: 20px;">砂場大戦争</h1>
+        
+        <div class="menu-box">
+            <h3 style="margin-top:0;">ひとりで遊ぶ</h3>
+            <p style="font-size:13px; color:#aaa; margin:5px 0 15px 0;">CPUと戦うモードです</p>
+            <button id="solo-btn" class="btn" style="background:#e74c3c; font-size:16px; width:80%;">ひとりで開始 (CPU戦)</button>
+        </div>
+
+        <div class="menu-box">
+            <h3 style="margin-top:0;">オンライン対戦</h3>
+            <div style="margin-bottom:10px;">
+                <button id="host-btn" class="btn" style="background:#2ecc71;">部屋を作る (HOST)</button>
+                <div id="my-id-display" style="margin-top:5px; font-size:12px; word-break:break-all; color:#f1c40f;"></div>
+            </div>
+            <hr style="border:0; border-top:1px solid #4e6d8d; margin:15px 0;">
+            <div>
+                <input type="text" id="peer-id-input" placeholder="相手のIDを入力"><br>
+                <button id="join-btn" class="btn" style="background:#e67e22;">部屋に参加 (GUEST)</button>
+            </div>
+        </div>
+        <div id="net-status" style="margin-top:10px; color:#aaa; font-weight:bold;"></div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer">
+        <div id="top-bar" class="panel">
+            <div id="phase-text" style="color: #f1c40f;">準備中... (残り5秒)</div>
+        </div>
+        
+        <div id="player-info" class="panel">
+            <div id="my-team-label" style="color: #3498db; font-weight:bold;">自軍の城</div>
+            HP: <span id="p-hp">1000</span> / 1000<br>
+            所持砂: <span id="p-cost" style="color:#f1c40f;font-weight:bold;font-size:20px;">150</span>
+        </div>
+        
+        <div id="enemy-info" class="panel">
+            <div id="enemy-team-label" style="color: #e74c3c; font-weight:bold;">敵軍の城</div>
+            HP: <span id="e-hp">1000</span> / 1000<br>
+            所持砂: <span id="e-cost" style="color:#f1c40f;font-weight:bold;font-size:20px;">150</span>
+        </div>
+
+        <div id="unit-ui" class="panel">
+            <h3 id="ui-selection-count" style="margin:0 0 5px 0;">ユニットを選択中</h3>
+            <div style="margin-top: 10px;">
+                <button id="up-atk" class="btn">攻撃UP (砂: 80)</button>
+                <button id="up-hp" class="btn">体力UP (砂: 80)</button>
+            </div>
+            <div style="font-size:12px; color:#aaa; margin-top:5px;">※砂を消費して選択中の自軍ユニットを強化します</div>
+        </div>
+
+        <div id="game-over">
+            <h1 id="result-text"></h1>
+            <button class="btn" onclick="location.reload()" style="margin-top:20px; font-size:20px; padding:10px 20px;">タイトルに戻る</button>
+        </div>
+    </div>
+
+<script>
+    let gameMode = ''; 
+    let peer = null;
+    let conn = null;
+    let myRole = ''; 
+    let isGameStarted = false;
+
+    let gamePhase = 'prepare';
+    let prepareTimer = 300; // 5秒間 (60フレーム × 5秒)
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const UPGRADE_COST = 80;
+    const RANGE = 50; 
+    const ATTACK_COOLDOWN = 60;
+
+    let globalCost = { player: 150, enemy: 150 };
+    
+    let castles = { player: {}, enemy: {} };
+    let mountains = [];
+    let summonList = [];
+    let units = [];
+    let selectedUnits = [];
+    let clickEffects = []; 
+    let sandParticles = [];
+
+    let selectionBox = { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0 };
+    let frameCount = 0;
+
+    let audioCtx = null;
+
+    function ensureAudioContext() {
+        const AudioCtor = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtor) return null;
+        if (!audioCtx) audioCtx = new AudioCtor();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+    }
+
+    function playDecisionSound() {
+        const ctx = ensureAudioContext();
+        if (!ctx) return;
+
+        const now = ctx.currentTime;
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        oscillator.type = 'triangle';
+        oscillator.frequency.setValueAtTime(660, now);
+        oscillator.frequency.exponentialRampToValueAtTime(880, now + 0.08);
+
+        gainNode.gain.setValueAtTime(0.0001, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        oscillator.start(now);
+        oscillator.stop(now + 0.18);
+    }
+
+    document.querySelectorAll('.btn').forEach((button) => {
+        button.addEventListener('click', playDecisionSound);
+    });
+
+    function initLayout() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const w = canvas.width;
+        const h = canvas.height;
+
+        let pHP = castles.player.hp !== undefined ? castles.player.hp : 1000;
+        let eHP = castles.enemy.hp !== undefined ? castles.enemy.hp : 1000;
+
+        castles.player = { x: 150, y: h / 2, hp: pHP, maxHp: 1000, color: '#3498db' };
+        castles.enemy = { x: w - 150, y: h / 2, hp: eHP, maxHp: 1000, color: '#e74c3c' };
+
+        mountains = [
+            { x: w / 2, y: h / 4, r: 60, owner: null, cap: 0 },
+            { x: w / 2, y: h * 3 / 4, r: 60, owner: null, cap: 0 }
+        ];
+
+        summonList = [
+            { type: 'light', name: '軽装兵', cost: 50, x: 20, y: (h / 2) - 130, w: 90, h: 75 },
+            { type: 'basic', name: '砂の兵士', cost: 30, x: 20, y: (h / 2) - 45, w: 90, h: 90 },
+            { type: 'heavy', name: '重装兵', cost: 80, x: 20, y: (h / 2) + 50, w: 90, h: 75 }
+        ];
+    }
+    
+    window.addEventListener('resize', initLayout);
+
+    class Unit {
+        constructor(team, type, x, y, id = Math.random().toString()) {
+            this.team = team; 
+            this.type = type; 
+            this.x = x; this.y = y;
+            this.tx = x; this.ty = y; 
+            this.id = id;
+            
+            if (type === 'light') {
+                this.maxHp = 60; this.hp = 60; this.attack = 6; this.speed = 1.1; this.size = 14;
+            } else if (type === 'heavy') {
+                this.maxHp = 180; this.hp = 180; this.attack = 20; this.speed = 0.3; this.size = 32;
+            } else {
+                this.maxHp = 100; this.hp = 100; this.attack = 10; this.speed = 0.5; this.size = 24;
+            }
+            
+            this.upgradeCount = 0;
+            this.localSand = 0;
+            this.walkDistance = 0;
+            this.atkCooldown = 0;
+            this.legSwing = 0;
+            this.isMoving = false;
+        }
+
+        update() {
+            let distToDest = Math.hypot(this.tx - this.x, this.ty - this.y);
+
+            if (distToDest > 2) {
+                this.isMoving = true;
+                let angle = Math.atan2(this.ty - this.y, this.tx - this.x);
+                this.x += Math.cos(angle) * this.speed;
+                this.y += Math.sin(angle) * this.speed;
+                
+                if (Math.random() < 0.4) {
+                    sandParticles.push({
+                        x: this.x + (Math.random() * 10 - 5), y: this.y + (Math.random() * 10 - 5),
+                        vx: (Math.random() - 0.5) * 0.8, vy: (Math.random() - 0.5) * 0.8,
+                        r: Math.random() * 3 + 1, alpha: 0.6
+                    });
+                }
+                
+                this.walkDistance += this.speed;
+                // 歩行時に得られる砂を最小値（1）に変更
+                if (this.walkDistance >= 100) {
+                    this.localSand += 1;
+                    this.walkDistance = 0;
+                }
+            } else {
+                this.isMoving = false;
+                this.x = this.tx; this.y = this.ty;
+            }
+
+            let targetEnemy = null;
+            let minDist = Infinity;
+            
+            units.forEach(u => {
+                if (u.team !== this.team && u.hp > 0) {
+                    let d = Math.hypot(u.x - this.x, u.y - this.y);
+                    if (d < minDist) { minDist = d; targetEnemy = u; }
+                }
+            });
+            
+            let eCastle = this.team === 'player' ? castles.enemy : castles.player;
+            let dc = Math.hypot(eCastle.x - this.x, eCastle.y - this.y) - 40;
+            if (dc < minDist) { minDist = dc; targetEnemy = 'CASTLE'; }
+
+            let canProcessCombat = (gameMode === 'solo' || myRole === 'host');
+            if (canProcessCombat && minDist <= RANGE && this.atkCooldown <= 0) {
+                if (targetEnemy === 'CASTLE') {
+                    eCastle.hp -= this.attack;
+                    if (eCastle.hp <= 0) {
+                        let winTeam = (this.team === 'player') ? 'WIN' : 'LOSE';
+                        endGame(winTeam);
+                        if (gameMode === 'online') {
+                            sendData({ type: 'GAMEOVER', winner: (winTeam === 'WIN' ? 'LOSE' : 'WIN') });
+                        }
+                    }
+                } else {
+                    targetEnemy.hp -= this.attack;
+                    if (targetEnemy.hp <= 0) this.localSand += 10;
+                }
+                this.atkCooldown = ATTACK_COOLDOWN;
+            }
+
+            if (this.atkCooldown > 0) this.atkCooldown--;
+
+            let myCastle = this.team === 'player' ? castles.player : castles.enemy;
+            if (Math.hypot(myCastle.x - this.x, myCastle.y - this.y) < 60) {
+                if (this.localSand > 0) {
+                    if (this.team === 'player') globalCost.player += this.localSand;
+                    else globalCost.enemy += this.localSand;
+                    this.localSand = 0;
+                    updateUI();
+                }
+            }
+
+            if (this.isMoving) this.legSwing += 0.1; 
+        }
+
+        getDynamicColor() {
+            let baseR, baseG, baseB;
+            if (this.type === 'light') { baseR = 229; baseG = 193; baseB = 133; }
+            else if (this.type === 'heavy') { baseR = 160; baseG = 128; baseB = 80; }
+            else { baseR = 210; baseG = 180; baseB = 140; }
+
+            let factor = Math.min(this.upgradeCount * 0.2, 0.85);
+            return `rgb(${Math.floor(baseR*(1-factor)+30*factor)}, ${Math.floor(baseG*(1-factor)+30*factor)}, ${Math.floor(baseB*(1-factor)+30*factor)})`;
+        }
+
+        draw() {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            let angle = Math.atan2(this.ty - this.y, this.tx - this.x);
+            if (this.isMoving) ctx.rotate(angle);
+
+            ctx.fillStyle = this.getDynamicColor();
+            ctx.strokeStyle = this.team === 'player' ? '#3498db' : '#e74c3c';
+            ctx.lineWidth = 3;
+
+            let s2 = this.size / 2;
+            let legSize = Math.max(4, s2 / 2.5);
+            let swing = Math.sin(this.legSwing) * (s2 / 3);
+
+            ctx.fillRect(s2*0.4, -s2*0.8, legSize, legSize); ctx.strokeRect(s2*0.4, -s2*0.8, legSize, legSize);
+            ctx.fillRect(s2*0.4, s2*0.8 - legSize, legSize, legSize); ctx.strokeRect(s2*0.4, s2*0.8 - legSize, legSize, legSize);
+            ctx.fillRect(-s2*0.8 + swing, -s2*0.8, legSize, legSize); ctx.strokeRect(-s2*0.8 + swing, -s2*0.8, legSize, legSize);
+            ctx.fillRect(-s2*0.8 - swing, s2*0.8 - legSize, legSize, legSize); ctx.strokeRect(-s2*0.8 - swing, s2*0.8 - legSize, legSize, legSize);
+
+            ctx.fillRect(-s2, -s2, this.size, this.size);
+            ctx.strokeRect(-s2, -s2, this.size, this.size);
+            ctx.restore();
+
+            let myTeamSide = (gameMode === 'solo' || myRole === 'host') ? 'player' : 'enemy';
+            if (this.team === myTeamSide && selectedUnits.includes(this)) {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size + 10, 0, Math.PI * 2);
+                ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 3; ctx.stroke();
+            }
+
+            let barW = Math.max(30, this.size * 1.5);
+            ctx.fillStyle = 'rgba(255,0,0,0.7)'; ctx.fillRect(this.x - barW/2, this.y - this.size - 16, barW, 4);
+            ctx.fillStyle = '#2ecc71'; ctx.fillRect(this.x - barW/2, this.y - this.size - 16, barW * (Math.max(0, this.hp) / this.maxHp), 4);
+
+            if (this.localSand > 0) {
+                ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 14px Arial';
+                ctx.fillText(`+${this.localSand}`, this.x - 10, this.y - this.size - 22);
+            }
+        }
+    }
+
+    function enemyAI() {
+        if (gameMode !== 'solo' || gamePhase !== 'battle') return;
+
+        if (frameCount % 60 === 0) {
+            let types = ['light', 'basic', 'heavy'];
+            let chosenType = types[Math.floor(Math.random() * types.length)];
+            let costMap = { light: 50, basic: 30, heavy: 80 };
+            
+            if (globalCost.enemy >= costMap[chosenType]) {
+                globalCost.enemy -= costMap[chosenType];
+                let startX = castles.enemy.x - 60;
+                let startY = castles.enemy.y + (Math.random() * 120 - 60);
+                let enemyUnit = new Unit('enemy', chosenType, startX, startY);
+                
+                enemyUnit.tx = castles.player.x + 40;
+                enemyUnit.ty = castles.player.y + (Math.random() * 120 - 60);
+                units.push(enemyUnit);
+            }
+        }
+
+        if (frameCount % 150 === 0) {
+            units.forEach(u => {
+                if (u.team === 'enemy' && !u.isMoving) {
+                    u.tx = castles.player.x + 30 + Math.random() * 40;
+                    u.ty = castles.player.y + (Math.random() * 160 - 80);
+                }
+            });
+        }
+    }
+
+    function update() {
+        if (!isGameStarted) return;
+
+        if (gamePhase === 'prepare') {
+            prepareTimer--;
+            if (prepareTimer <= 0) {
+                gamePhase = 'battle';
+            }
+        }
+
+        if (frameCount % 60 === 0) {
+            globalCost.player += 1;
+            globalCost.enemy += 1;
+        }
+
+        enemyAI();
+
+        for (let i = units.length - 1; i >= 0; i--) {
+            units[i].update();
+            if (units[i].hp <= 0) {
+                let selIdx = selectedUnits.indexOf(units[i]);
+                if (selIdx > -1) selectedUnits.splice(selIdx, 1);
+                units.splice(i, 1);
+            }
+        }
+
+        mountains.forEach(m => {
+            let pCount = 0, eCount = 0;
+            units.forEach(u => {
+                if (Math.hypot(u.x - m.x, u.y - m.y) <= m.r) {
+                    if (u.team === 'player') pCount++; else eCount++;
+                }
+            });
+
+            if (pCount > eCount) m.cap = Math.min(100, m.cap + 1);
+            else if (eCount > pCount) m.cap = Math.max(-100, m.cap - 1);
+
+            if (m.cap === 100) m.owner = 'player';
+            else if (m.cap === -100) m.owner = 'enemy';
+            else if (m.cap > -100 && m.cap < 100) m.owner = null;
+
+            if (frameCount % 60 === 0) {
+                if (m.owner === 'player') globalCost.player += 2;
+                if (m.owner === 'enemy') globalCost.enemy += 2;
+            }
+        });
+
+        if (gameMode === 'online' && myRole === 'host' && frameCount % 30 === 0) {
+            sendData({
+                type: 'SYNC',
+                cost: globalCost,
+                pHp: castles.player.hp,
+                eHp: castles.enemy.hp,
+                phase: gamePhase,
+                units: units.map(u => ({ id: u.id, team: u.team, type: u.type, x: u.x, y: u.y, tx: u.tx, ty: u.ty, hp: u.hp, maxHp: u.maxHp, atk: u.attack, up: u.upgradeCount }))
+            });
+        }
+
+        updateUI();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = 'rgba(180, 150, 110, 0.15)';
+        for (let i = 0; i < 60; i++) {
+            let px = (i * 137.5) % canvas.width;
+            let py = (i * 211.3 + frameCount * 0.2) % canvas.height;
+            ctx.fillRect(px, py, 2, 2);
+        }
+
+        ctx.strokeStyle = '#8b5a2b'; ctx.lineWidth = 20;
+        ctx.strokeRect(0, 0, canvas.width, canvas.height);
+
+        mountains.forEach(m => {
+            ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+            ctx.fillStyle = m.owner === 'player' ? 'rgba(52, 152, 219, 0.4)' : 
+                            m.owner === 'enemy'  ? 'rgba(231, 76, 60, 0.4)' : 'rgba(241, 196, 15, 0.4)';
+            ctx.fill(); ctx.strokeStyle = '#f39c12'; ctx.lineWidth = 3; ctx.stroke();
+            
+            ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(m.x - 30, m.y - 5, 60, 10);
+            ctx.fillStyle = m.cap > 0 ? '#3498db' : '#e74c3c';
+            ctx.fillRect(m.x - 5, m.y - 5, (m.cap / 100) * 35, 10);
+        });
+
+        for (let team in castles) {
+            let c = castles[team];
+            ctx.fillStyle = c.color;
+            ctx.beginPath(); ctx.arc(c.x, c.y, 50, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#e3c16f'; ctx.fillRect(c.x-25, c.y-25, 50, 50);
+            ctx.strokeStyle = '#8b5a2b'; ctx.lineWidth = 2; ctx.strokeRect(c.x-25, c.y-25, 50, 50);
+            
+            ctx.fillStyle = 'rgba(255,0,0,0.7)'; ctx.fillRect(c.x - 40, c.y - 60, 80, 8);
+            ctx.fillStyle = '#2ecc71'; ctx.fillRect(c.x - 40, c.y - 60, 80 * (Math.max(0, c.hp) / c.maxHp), 8);
+        }
+
+        summonList.forEach(item => {
+            let myCost = (gameMode === 'solo' || myRole === 'host') ? globalCost.player : globalCost.enemy;
+            let canAfford = myCost >= item.cost;
+            ctx.fillStyle = canAfford ? 'rgba(52, 152, 219, 0.8)' : 'rgba(127, 140, 141, 0.8)';
+            ctx.fillRect(item.x, item.y, item.w, item.h);
+            ctx.strokeStyle = canAfford ? '#ecf0f1' : '#bdc3c7'; ctx.lineWidth = 2;
+            ctx.strokeRect(item.x, item.y, item.w, item.h);
+
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText(item.name, item.x + item.w / 2, item.y + 18);
+            ctx.fillStyle = canAfford ? '#f1c40f' : '#bdc3c7';
+            ctx.fillText(`砂:${item.cost}`, item.x + item.w / 2, item.y + item.h - 10);
+
+            let previewSize = item.type === 'light' ? 12 : (item.type === 'heavy' ? 22 : 16);
+            ctx.fillStyle = item.type === 'light' ? '#e5c185' : (item.type === 'heavy' ? '#a08050' : '#d2b48c');
+            ctx.strokeStyle = '#3498db'; ctx.lineWidth = 2;
+            ctx.fillRect(item.x + item.w / 2 - previewSize/2, item.y + 24, previewSize, previewSize);
+            ctx.strokeRect(item.x + item.w / 2 - previewSize/2, item.y + 24, previewSize, previewSize);
+        });
+
+        for (let i = sandParticles.length - 1; i >= 0; i--) {
+            let p = sandParticles[i];
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(165, 135, 95, ${p.alpha})`; ctx.fill();
+            p.x += p.vx; p.y += p.vy; p.alpha -= 0.03;
+            if (p.alpha <= 0) sandParticles.splice(i, 1);
+        }
+
+        units.forEach(u => u.draw());
+
+        for(let i = clickEffects.length - 1; i >= 0; i--) {
+            let e = clickEffects[i];
+            ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI*2);
+            ctx.strokeStyle = `rgba(52, 152, 219, ${e.alpha})`; ctx.lineWidth = 3; ctx.stroke();
+            e.r += 2; e.alpha -= 0.05;
+            if (e.alpha <= 0) clickEffects.splice(i, 1);
+        }
+
+        if (selectionBox.active) {
+            ctx.fillStyle = 'rgba(52, 152, 219, 0.2)';
+            ctx.strokeStyle = '#3498db'; ctx.lineWidth = 1;
+            ctx.fillRect(selectionBox.startX, selectionBox.startY, selectionBox.currentX - selectionBox.startX, selectionBox.currentY - selectionBox.startY);
+            ctx.strokeRect(selectionBox.startX, selectionBox.startY, selectionBox.currentX - selectionBox.startX, selectionBox.currentY - selectionBox.startY);
+        }
+    }
+
+    function loop() {
+        frameCount++;
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    function handleInputStart(mx, my) {
+        if (!isGameStarted) return;
+        let myTeamSide = (gameMode === 'solo' || myRole === 'host') ? 'player' : 'enemy';
+        let myCurrentCost = (gameMode === 'solo' || myRole === 'host') ? globalCost.player : globalCost.enemy;
+
+        for (let item of summonList) {
+            if (mx >= item.x && mx <= item.x + item.w && my >= item.y && my <= item.y + item.h) {
+                if (myCurrentCost >= item.cost) {
+                    if (gameMode === 'solo' || myRole === 'host') globalCost.player -= item.cost;
+                    else globalCost.enemy -= item.cost;
+                    
+                    let castleObj = (myTeamSide === 'player') ? castles.player : castles.enemy;
+                    let startX = castleObj.x + (myTeamSide === 'player' ? 50 : -50);
+                    let startY = castleObj.y + (Math.random() * 80 - 40);
+                    let newUnit = new Unit(myTeamSide, item.type, startX, startY);
+                    newUnit.tx = startX + (myTeamSide === 'player' ? 50 : -50);
+                    newUnit.ty = startY;
+                    
+                    units.push(newUnit);
+                    updateUI();
+
+                    if (gameMode === 'online') {
+                        sendData({ type: 'SPAWN', team: myTeamSide, uType: item.type, x: startX, y: startY, id: newUnit.id });
+                    }
+                }
+                return; 
+            }
+        }
+        selectionBox.active = true;
+        selectionBox.startX = mx; selectionBox.startY = my;
+        selectionBox.currentX = mx; selectionBox.currentY = my;
+    }
+
+    function handleInputMove(mx, my) {
+        if (selectionBox.active) {
+            selectionBox.currentX = mx; selectionBox.currentY = my;
+        }
+    }
+
+    function handleInputEnd(mx, my) {
+        if (!selectionBox.active || !isGameStarted) return;
+        selectionBox.active = false;
+        let myTeamSide = (gameMode === 'solo' || myRole === 'host') ? 'player' : 'enemy';
+
+        const dragDist = Math.hypot(mx - selectionBox.startX, my - selectionBox.startY);
+
+        if (dragDist < 10) {
+            let clickedUnit = null;
+            for (let u of units) {
+                if (u.team === myTeamSide && Math.hypot(u.x - mx, u.y - my) < u.size + 5) {
+                    clickedUnit = u; break;
+                }
+            }
+
+            if (clickedUnit) {
+                selectedUnits = [clickedUnit];
+            } else if (selectedUnits.length > 0) {
+                let offset = 0;
+                selectedUnits.forEach(u => {
+                    u.tx = mx + (Math.random() * offset - offset/2);
+                    u.ty = my + (Math.random() * offset - offset/2);
+                    offset += 20;
+                    
+                    if (gameMode === 'online') {
+                        sendData({ type: 'MOVE', id: u.id, tx: u.tx, ty: u.ty });
+                    }
+                });
+                clickEffects.push({x: mx, y: my, r: 5, alpha: 1});
+            } else {
+                selectedUnits = [];
+            }
+        } else {
+            selectedUnits = [];
+            let minX = Math.min(selectionBox.startX, mx), maxX = Math.max(selectionBox.startX, mx);
+            let minY = Math.min(selectionBox.startY, my), maxY = Math.max(selectionBox.startY, my);
+
+            units.forEach(u => {
+                if (u.team === myTeamSide && u.x >= minX && u.x <= maxX && u.y >= minY && u.y <= maxY) {
+                    selectedUnits.push(u);
+                }
+            });
+        }
+        updateUI();
+    }
+
+    canvas.addEventListener('pointerdown', (e) => { e.preventDefault(); handleInputStart(e.clientX, e.clientY); });
+    canvas.addEventListener('pointermove', (e) => { handleInputMove(e.clientX, e.clientY); });
+    canvas.addEventListener('pointerup', (e) => { handleInputEnd(e.clientX, e.clientY); });
+    canvas.addEventListener('pointerleave', () => { if (selectionBox.active) selectionBox.active = false; });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    canvas.addEventListener('mousedown', (e) => handleInputStart(e.clientX, e.clientY));
+    canvas.addEventListener('mousemove', (e) => handleInputMove(e.clientX, e.clientY));
+    canvas.addEventListener('mouseup',   (e) => handleInputEnd(e.clientX, e.clientY));
+
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); let t = e.touches[0]; handleInputStart(t.clientX, t.clientY); }, {passive: false});
+    canvas.addEventListener('touchmove', (e) => { e.preventDefault(); let t = e.touches[0]; handleInputMove(t.clientX, t.clientY); }, {passive: false});
+    canvas.addEventListener('touchend', (e) => { e.preventDefault(); let t = e.changedTouches[0]; handleInputEnd(t.clientX, t.clientY); }, {passive: false});
+
+    ['atk', 'hp'].forEach(stat => {
+        document.getElementById(`up-${stat}`).addEventListener('click', () => {
+            let myCurrentCost = (gameMode === 'solo' || myRole === 'host') ? globalCost.player : globalCost.enemy;
+            let totalCostNeeded = selectedUnits.length * UPGRADE_COST;
+            
+            if (selectedUnits.length > 0 && myCurrentCost >= totalCostNeeded) {
+                if (gameMode === 'solo' || myRole === 'host') globalCost.player -= totalCostNeeded;
+                else globalCost.enemy -= totalCostNeeded;
+
+                let unitIds = [];
+                selectedUnits.forEach(u => {
+                    u.upgradeCount++;
+                    if (stat === 'atk') u.attack += 5;
+                    if (stat === 'hp') { u.maxHp += 20; u.hp += 20; }
+                    unitIds.push(u.id);
+                });
+                updateUI();
+                if (gameMode === 'online') {
+                    sendData({ type: 'UPGRADE', stat: stat, ids: unitIds });
+                }
+            }
+        });
+    });
+
+    function updateUI() {
+        document.getElementById('p-hp').innerText = Math.max(0, Math.floor(castles.player.hp));
+        document.getElementById('e-hp').innerText = Math.max(0, Math.floor(castles.enemy.hp));
+        document.getElementById('p-cost').innerText = globalCost.player;
+        document.getElementById('e-cost').innerText = globalCost.enemy;
+
+        const phaseText = document.getElementById('phase-text');
+        if (gamePhase === 'prepare') {
+            let sec = Math.ceil(prepareTimer / 60);
+            phaseText.innerText = `準備中... (戦闘開始まであと ${sec} 秒)`;
+            phaseText.style.color = '#f1c40f';
+        } else {
+            phaseText.innerText = '敵の城を破壊せよ！ (戦闘中)';
+            phaseText.style.color = '#2ecc71';
+        }
+
+        const unitUI = document.getElementById('unit-ui');
+        if (selectedUnits.length > 0) {
+            unitUI.style.display = 'block';
+            let costNeeded = selectedUnits.length * UPGRADE_COST;
+            document.getElementById('ui-selection-count').innerText = `${selectedUnits.length}体選択中 (一括強化砂: ${costNeeded})`;
+        } else {
+            unitUI.style.display = 'none';
+        }
+    }
+
+    function endGame(result) {
+        isGameStarted = false;
+        document.getElementById('game-over').style.display = 'flex';
+        const t = document.getElementById('result-text');
+        if (result === 'WIN') {
+            t.innerText = "勝利！ 敵の城を破壊した！"; t.style.color = "#2ecc71";
+        } else {
+            t.innerText = "敗北… 自軍の城が落ちた…"; t.style.color = "#e74c3c";
+        }
+    }
+
+    document.getElementById('solo-btn').addEventListener('click', () => {
+        gameMode = 'solo';
+        gamePhase = 'prepare';
+        prepareTimer = 300;
+        isGameStarted = true;
+        document.getElementById('menu-overlay').style.display = 'none';
+        document.getElementById('ui-layer').style.display = 'block';
+        initLayout();
+        loop();
+    });
+
+    document.getElementById('host-btn').addEventListener('click', () => {
+        gameMode = 'online';
+        myRole = 'host';
+        document.getElementById('net-status').innerText = "接続IDを発行中...";
+        peer = new Peer();
+
+        peer.on('open', (id) => {
+            document.getElementById('my-id-display').innerText = `ID: ${id}\n(このIDを相手に伝えてください)`;
+            document.getElementById('net-status').innerText = "対戦相手の参加を待っています...";
+        });
+
+        peer.on('connection', (incomingConn) => {
+            conn = incomingConn;
+            setupConnection();
+        });
+    });
+
+    document.getElementById('join-btn').addEventListener('click', () => {
+        gameMode = 'online';
+        myRole = 'guest';
+        let remoteId = document.getElementById('peer-id-input').value.trim();
+        if (!remoteId) { alert('相手のIDを入力してください'); return; }
+
+        document.getElementById('net-status').innerText = "接続中...";
+        peer = new Peer();
+
+        peer.on('open', () => {
+            conn = peer.connect(remoteId);
+            setupConnection();
+        });
+    });
+
+    function setupConnection() {
+        conn.on('open', () => {
+            isGameStarted = true;
+            gamePhase = 'prepare';
+            prepareTimer = 300;
+            document.getElementById('menu-overlay').style.display = 'none';
+            document.getElementById('ui-layer').style.display = 'block';
+            
+            if (myRole === 'host') {
+                document.getElementById('my-team-label').innerText = "1P陣営 (青・左)";
+                document.getElementById('enemy-team-label').innerText = "2P陣営 (赤・右)";
+            } else {
+                document.getElementById('my-team-label').innerText = "2P陣営 (赤・右)";
+                document.getElementById('enemy-team-label').innerText = "1P陣営 (青・左)";
+            }
+            initLayout();
+            loop();
+        });
+
+        conn.on('data', (data) => {
+            handleNetworkData(data);
+        });
+
+        conn.on('close', () => {
+            alert('対戦相手との接続が切断されました。');
+            location.reload();
+        });
+    }
+
+    function sendData(data) {
+        if (gameMode === 'online' && conn && conn.open) {
+            conn.send(data);
+        }
+    }
+
+    function handleNetworkData(data) {
+        if (data.type === 'SYNC' && myRole === 'guest') {
+            globalCost = data.cost;
+            castles.player.hp = data.pHp;
+            castles.enemy.hp = data.eHp;
+            gamePhase = data.phase;
+            
+            data.units.forEach(ru => {
+                let existing = units.find(u => u.id === ru.id);
+                if (existing) {
+                    existing.x = ru.x; existing.y = ru.y;
+                    existing.hp = ru.hp;
+                } else {
+                    let nu = new Unit(ru.team, ru.type, ru.x, ru.y, ru.id);
+                    nu.hp = ru.hp; nu.maxHp = ru.maxHp; nu.attack = ru.atk; nu.upgradeCount = ru.up;
+                    units.push(nu);
+                }
+            });
+        } else if (data.type === 'SPAWN') {
+            let nu = new Unit(data.team, data.uType, data.x, data.y, data.id);
+            units.push(nu);
+        } else if (data.type === 'MOVE') {
+            let u = units.find(unit => unit.id === data.id);
+            if (u) { u.tx = data.tx; u.ty = data.ty; }
+        } else if (data.type === 'UPGRADE') {
+            data.ids.forEach(id => {
+                let u = units.find(unit => unit.id === id);
+                if (u) {
+                    u.upgradeCount++;
+                    if (data.stat === 'atk') u.attack += 5;
+                    if (data.stat === 'hp') { u.maxHp += 20; u.hp += 20; }
+                }
+            });
+        } else if (data.type === 'GAMEOVER') {
+            endGame(data.winner);
+        }
+    }
+</script>
+</body>
+</html>
