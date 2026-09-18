@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D ドルフィン・スコアアタック</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #00152b; font-family: sans-serif; user-select: none; }
+        #ui { position: absolute; top: 20px; left: 20px; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8); pointer-events: none; }
+        h1 { margin: 0 0 10px 0; font-size: 22px; color: #00ffff; }
+        .stat { font-size: 20px; margin-bottom: 8px; font-weight: bold; }
+        #combo-popup {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 32px;
+            font-weight: bold;
+            color: #ff00ff;
+            text-shadow: 0 0 10px #ffffff;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 5;
+        }
+        #controls-info { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 10px; color: #fff; text-align: center; border: 1px solid rgba(255,255,255,0.3); font-size: 14px; }
+        #message-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0, 30, 60, 0.95); color: #fff; z-index: 10; }
+        #message-overlay h2 { font-size: 36px; margin-bottom: 15px; text-shadow: 0 0 10px #00ffff; text-align: center; }
+        .input-group { margin-bottom: 20px; text-align: center; }
+        .input-group label { display: block; font-size: 16px; margin-bottom: 8px; color: #00ffff; }
+        .input-group input { padding: 10px 15px; font-size: 18px; border-radius: 8px; border: 2px solid #00ffff; background: rgba(0,0,0,0.5); color: #fff; text-align: center; outline: none; width: 220px; }
+        .btn { padding: 12px 30px; font-size: 18px; font-weight: bold; background: #00ffff; color: #000; border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 0 15px rgba(0,255,255,0.5); transition: 0.2s; }
+        .btn:hover { background: #fff; transform: scale(1.05); }
+        #ranking-container { background: rgba(0,0,0,0.5); border: 1px solid rgba(0,255,255,0.4); border-radius: 10px; padding: 15px; margin-bottom: 20px; width: 300px; text-align: left; }
+        #ranking-container h3 { margin: 0 0 10px 0; font-size: 18px; color: #ffcc00; text-align: center; }
+        .ranking-item { display: flex; justify-content: space-between; font-size: 16px; margin-bottom: 6px; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 4px; }
+    </style>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="ui">
+        <h1>🐬 3D ドルフィン・スコアアタック</h1>
+        <div class="stat">プレイヤー: <span id="player-name-val" style="color: #00ffff;">-</span></div>
+        <div class="stat">スコア: <span id="score-val" style="color: #ffcc00;">0</span> pt</div>
+        <div class="stat">スピード: <span id="speed-val">0</span> km/h</div>
+        <div class="stat">残り時間: <span id="time-val">60</span> 秒</div>
+        <div class="stat" id="boost-status" style="color: #ff00ff; font-weight: bold;"></div>
+    </div>
+
+    <div id="combo-popup">✨ ＮＩＣＥ ＪＵＭＰ！ +500pt</div>
+
+    <div id="controls-info">
+        [ ↑ / W ] アクセル | [ ↓ / S ] ブレーキ | [ ← → / A D ] 左右移動（A:右 / D:左・コースアウトで減点）<br>
+        💎 リング潜り（+300pt） ｜ 🚀 加速床（ブースト） ｜ 🌊 ジャンプ台（+500pt） ｜ ⚠️ 外側は減点！
+    </div>
+
+    <div id="message-overlay">
+        <h2>3D DOLPHIN SCORE ATTACK</h2>
+        <div class="input-group">
+            <label for="username-input">プレイヤー名を入力</label>
+            <input type="text" id="username-input" value="ドルフィン" maxlength="12">
+        </div>
+        <div id="ranking-container">
+            <h3>🏆 ハイスコアランキング</h3>
+            <div id="ranking-list">
+                <div class="ranking-item"><span>1. 読み込み中...</span><span>0 pt</span></div>
+            </div>
+        </div>
+        <button id="start-btn" class="btn" onclick="startGame()">ゲームスタート</button>
+    </div>
+
+    <script>
+        let scene, camera, renderer;
+        let playerDolphin, tailFlukeMesh;
+        let trackLength = 10000;
+        let playerZ = 0, playerSpeed = 0, playerX = 0, playerY = 0;
+        let verticalVelocity = 0, boostTimer = 0;
+        let score = 0;
+        let gameTime = 60;
+        let timerInterval = null;
+        let playerName = "ドルフィン";
+        
+        let keys = { up: false, down: false, left: false, right: false };
+        let gameActive = false;
+        const maxSpeed = 1.6, acceleration = 0.018, deceleration = 0.02;
+        
+        let rings = [], boosters = [], jumps = [], coins = [];
+        let highScores = JSON.parse(localStorage.getItem('dolphin_highscores') || '[]');
+
+        window.addEventListener('load', () => {
+            if (typeof THREE === 'undefined') {
+                document.getElementById('message-overlay').innerHTML = "<h2>エラー</h2><p>3Dライブラリの読み込みに失敗しました。</p>";
+                return;
+            }
+            try {
+                init();
+                updateRankingDisplay();
+            } catch (e) {
+                console.error(e);
+            }
+        });
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x00152b);
+            scene.fog = new THREE.FogExp2(0x00152b, 0.012);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1500);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            const dirLight = new THREE.DirectionalLight(0x73ecff, 0.9);
+            dirLight.position.set(0, 100, 50);
+            scene.add(dirLight);
+
+            createEnvironment();
+
+            playerDolphin = createDolphinModel(0x00d2ff);
+            playerDolphin.position.set(0, 0, 0);
+            scene.add(playerDolphin);
+
+            window.addEventListener("keydown", (e) => handleKeys(e, true));
+            window.addEventListener("keyup", (e) => handleKeys(e, false));
+            window.addEventListener("resize", onWindowResize);
+
+            renderer.render(scene, camera);
+        }
+
+        // イルカモデル（しっぽの造形に超こだわり、三日月形の美しい尾びれを構築）
+        function createDolphinModel(color) {
+            const group = new THREE.Group();
+            const bodyMat = new THREE.MeshPhongMaterial({ 
+                color: color, 
+                shininess: 120, 
+                specular: 0x888888 
+            });
+
+            // 1. メインボディ（胴体中央）
+            const bodyGeo = new THREE.CylinderGeometry(0.55, 0.75, 3.2, 16);
+            bodyGeo.rotateX(Math.PI / 2);
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.scale.set(1, 0.95, 1.3);
+            group.add(body);
+
+            // 2. 頭部（メロン部）と口先（スノート）
+            const headGeo = new THREE.SphereGeometry(0.55, 16, 16);
+            headGeo.scale(1, 0.9, 1.4);
+            const head = new THREE.Mesh(headGeo, bodyMat);
+            head.position.set(0, 0.05, 1.1);
+            group.add(head);
+
+            const snoutGeo = new THREE.ConeGeometry(0.3, 1.4, 12);
+            snoutGeo.rotateX(Math.PI / 2);
+            const snout = new THREE.Mesh(snoutGeo, bodyMat);
+            snout.position.set(0, -0.05, 1.85);
+            group.add(snout);
+
+            // 3. 背びれ
+            const dorsalGeo = new THREE.ConeGeometry(0.18, 0.9, 6);
+            dorsalGeo.rotateZ(-Math.PI / 4);
+            dorsalGeo.rotateX(Math.PI / 12);
+            const dorsal = new THREE.Mesh(dorsalGeo, bodyMat);
+            dorsal.position.set(0, 0.75, -0.3);
+            group.add(dorsal);
+
+            // 4. 胸びれ
+            const finShape = new THREE.BoxGeometry(1.4, 0.04, 0.5);
+            const leftFin = new THREE.Mesh(finShape, bodyMat);
+            leftFin.position.set(0.75, -0.35, 0.4);
+            leftFin.rotation.z = -Math.PI / 5;
+            leftFin.rotation.y = Math.PI / 5;
+            group.add(leftFin);
+
+            const rightFin = new THREE.Mesh(finShape, bodyMat);
+            rightFin.position.set(-0.75, -0.35, 0.4);
+            rightFin.rotation.z = Math.PI / 5;
+            rightFin.rotation.y = -Math.PI / 5;
+            group.add(rightFin);
+
+            // 5. 尾柄（しっぽへ向かう細い部分）
+            const peduncleGeo = new THREE.CylinderGeometry(0.18, 0.45, 2.2, 12);
+            peduncleGeo.rotateX(Math.PI / 2);
+            const peduncle = new THREE.Mesh(peduncleGeo, bodyMat);
+            peduncle.position.set(0, 0, -1.9);
+            group.add(peduncle);
+
+            // 6. ★【こだわりポイント】超リアルな三日月形の尾びれ（フルーク）パーツ群
+            tailFlukeMesh = new THREE.Group();
+            
+            // 左側の尾びれパーツ（スイープ形状）
+            const lobeGeoLeft = new THREE.BoxGeometry(0.95, 0.03, 0.45);
+            const tailLeft = new THREE.Mesh(lobeGeoLeft, bodyMat);
+            tailLeft.position.set(0.5, 0, -0.15);
+            tailLeft.rotation.y = -Math.PI / 7;
+            tailLeft.rotation.z = -Math.PI / 12;
+            tailFlukeMesh.add(tailLeft);
+
+            // 右側の尾びれパーツ（スイープ形状）
+            const lobeGeoRight = new THREE.BoxGeometry(0.95, 0.03, 0.45);
+            const tailRight = new THREE.Mesh(lobeGeoRight, bodyMat);
+            tailRight.position.set(-0.5, 0, -0.15);
+            tailRight.rotation.y = Math.PI / 7;
+            tailRight.rotation.z = Math.PI / 12;
+            tailFlukeMesh.add(tailRight);
+
+            // 中央の接続ジョイント（自然なつながり）
+            const centerGeo = new THREE.BoxGeometry(0.4, 0.03, 0.5);
+            const tailCenter = new THREE.Mesh(centerGeo, bodyMat);
+            tailCenter.position.set(0, 0, 0);
+            tailFlukeMesh.add(tailCenter);
+
+            tailFlukeMesh.position.set(0, 0, -3.1);
+            group.add(tailFlukeMesh);
+
+            return group;
+        }
+
+        function createEnvironment() {
+            const floorGeo = new THREE.PlaneGeometry(80, trackLength + 600);
+            const floor = new THREE.Mesh(floorGeo, new THREE.MeshPhongMaterial({ color: 0x001f3f }));
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(0, -5, trackLength / 2);
+            scene.add(floor);
+
+            for (let i = 100; i < trackLength; i += 150) {
+                const poleGeo = new THREE.CylinderGeometry(0.2, 0.2, 10);
+                const poleMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+                const leftPole = new THREE.Mesh(poleGeo, poleMat);
+                leftPole.position.set(-10, 0, i);
+                scene.add(leftPole);
+                const rightPole = new THREE.Mesh(poleGeo, poleMat);
+                rightPole.position.set(10, 0, i);
+                scene.add(rightPole);
+            }
+
+            for (let i = 150; i < trackLength; i += 120) {
+                let laneX = ((i / 120) % 3 - 1) * 3;
+
+                const ringGeo = new THREE.TorusGeometry(3.2, 0.25, 8, 24);
+                const ringMat = new THREE.MeshPhongMaterial({ color: 0x00ffff, emissive: 0x00aaaa });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.position.set(laneX, 1.5, i);
+                scene.add(ring);
+                rings.push({ x: laneX, y: 1.5, z: i, collected: false, mesh: ring });
+
+                const coinGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.2, 16);
+                coinGeo.rotateX(Math.PI / 2);
+                const coinMat = new THREE.MeshPhongMaterial({ color: 0xffcc00, emissive: 0x554400 });
+                const coin = new THREE.Mesh(coinGeo, coinMat);
+                coin.position.set(-laneX, 0, i + 60);
+                scene.add(coin);
+                coins.push({ x: -laneX, z: i + 60, collected: false, mesh: coin });
+
+                if (i % 240 === 0) {
+                    const boostGeo = new THREE.BoxGeometry(4, 0.2, 5);
+                    const boostMat = new THREE.MeshPhongMaterial({ color: 0xff00ff, emissive: 0xaa00aa });
+                    const booster = new THREE.Mesh(boostGeo, boostMat);
+                    booster.position.set(0, -4.8, i + 30);
+                    scene.add(booster);
+                    boosters.push({ x: 0, z: i + 30 });
+                } else {
+                    const rampGeo = new THREE.BoxGeometry(4, 0.6, 5);
+                    const rampMat = new THREE.MeshPhongMaterial({ color: 0xff6600, emissive: 0x552200 });
+                    const ramp = new THREE.Mesh(rampGeo, rampMat);
+                    ramp.position.set(laneX, -4.7, i + 30);
+                    ramp.rotation.x = -0.3;
+                    scene.add(ramp);
+                    jumps.push({ x: laneX, z: i + 30 });
+                }
+            }
+        }
+
+        function handleKeys(e, isDown) {
+            if (["ArrowUp", "KeyW"].includes(e.code)) keys.up = isDown;
+            if (["ArrowDown", "KeyS"].includes(e.code)) keys.down = isDown;
+            if (["ArrowLeft", "KeyA"].includes(e.code)) keys.left = isDown;
+            if (["ArrowRight", "KeyD"].includes(e.code)) keys.right = isDown;
+        }
+
+        function startGame() {
+            const inputVal = document.getElementById("username-input").value.trim();
+            if (inputVal !== "") {
+                playerName = inputVal;
+            }
+            document.getElementById("player-name-val").innerText = playerName;
+
+            document.getElementById("message-overlay").style.display = "none";
+            gameActive = true;
+            score = 0;
+            gameTime = 60;
+            playerZ = 0; playerSpeed = 0.5; playerX = 0; playerY = 0;
+            verticalVelocity = 0; boostTimer = 0;
+
+            rings.forEach(r => { r.collected = false; r.mesh.visible = true; });
+            coins.forEach(c => { c.collected = false; c.mesh.visible = true; });
+
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                gameTime--;
+                document.getElementById("time-val").innerText = gameTime;
+                if (gameTime <= 0) {
+                    clearInterval(timerInterval);
+                    endGame();
+                }
+            }, 1000);
+
+            requestAnimationFrame(update);
+        }
+
+        function endGame() {
+            gameActive = false;
+
+            highScores.push({ name: playerName, score: score });
+            highScores.sort((a, b) => b.score - a.score);
+            highScores = highScores.slice(0, 5);
+            localStorage.setItem('dolphin_highscores', JSON.stringify(highScores));
+            updateRankingDisplay();
+
+            const overlay = document.getElementById("message-overlay");
+            overlay.style.display = "flex";
+            
+            document.getElementById("message-overlay").innerHTML = `
+                <h2>⏰ タイムアップ！</h2>
+                <p style="font-size:24px; color:#ffcc00; margin-bottom:15px;">${playerName} のスコア: ${score} pt</p>
+                <div id="ranking-container">
+                    <h3>🏆 ハイスコアランキング</h3>
+                    <div id="ranking-list"></div>
+                </div>
+                <button id="start-btn" class="btn" onclick="resetAndRestart()">もう一度プレイ</button>
+            `;
+            updateRankingDisplay();
+        }
+
+        function updateRankingDisplay() {
+            const listEl = document.getElementById("ranking-list");
+            if (!listEl) return;
+            if (highScores.length === 0) {
+                listEl.innerHTML = '<div class="ranking-item"><span>記録なし</span><span>0 pt</span></div>';
+                return;
+            }
+            let html = "";
+            highScores.forEach((item, index) => {
+                html += `<div class="ranking-item"><span>${index + 1}. ${item.name}</span><span>${item.score} pt</span></div>`;
+            });
+            listEl.innerHTML = html;
+        }
+
+        function resetAndRestart() {
+            document.getElementById("message-overlay").innerHTML = `
+                <h2>3D DOLPHIN SCORE ATTACK</h2>
+                <div class="input-group">
+                    <label for="username-input">プレイヤー名を入力</label>
+                    <input type="text" id="username-input" value="${playerName}" maxlength="12">
+                </div>
+                <div id="ranking-container">
+                    <h3>🏆 ハイスコアランキング</h3>
+                    <div id="ranking-list"></div>
+                </div>
+                <button id="start-btn" class="btn" onclick="startGame()">ゲームスタート</button>
+            `;
+            updateRankingDisplay();
+        }
+
+        function showPopup(text) {
+            const popup = document.getElementById("combo-popup");
+            popup.innerText = text;
+            popup.style.opacity = "1";
+            popup.style.transform = "translate(-50%, -70%) scale(1.2)";
+            setTimeout(() => {
+                popup.style.opacity = "0";
+                popup.style.transform = "translate(-50%, -50%) scale(1)";
+            }, 500);
+        }
+
+        function update() {
+            if (gameActive) {
+                let currentMaxSpeed = maxSpeed;
+                if (boostTimer > 0) {
+                    currentMaxSpeed = maxSpeed * 1.9;
+                    boostTimer--;
+                    document.getElementById("boost-status").innerText = "⚡ ＢＯＯＳＴ ＭＡＸ！！";
+                } else {
+                    document.getElementById("boost-status").innerText = "";
+                }
+
+                if (keys.up) {
+                    playerSpeed += acceleration;
+                    if (playerSpeed > currentMaxSpeed) playerSpeed = currentMaxSpeed;
+                } else if (keys.down) {
+                    playerSpeed -= deceleration;
+                    if (playerSpeed < 0) playerSpeed = 0;
+                } else {
+                    playerSpeed -= 0.004;
+                    if (playerSpeed < 0.2) playerSpeed = 0.2;
+                }
+
+                score += Math.round(playerSpeed * 2);
+
+                // Aキーで右、Dキーで左移動
+                if (keys.left) playerX += 0.14; 
+                if (keys.right) playerX -= 0.14; 
+
+                // コースアウト判定
+                if (Math.abs(playerX) > 8.5) {
+                    score -= 10;
+                    playerSpeed *= 0.95;
+                    showPopup("⚠️ コースアウト！ -10pt");
+                }
+                playerX = Math.max(-9.5, Math.min(9.5, playerX));
+
+                if (playerY > 0 || verticalVelocity !== 0) {
+                    playerY += verticalVelocity;
+                    verticalVelocity -= 0.015;
+                    if (playerY <= 0) { playerY = 0; verticalVelocity = 0; }
+                }
+
+                playerZ += playerSpeed;
+                if (playerZ > trackLength - 500) playerZ = 0;
+
+                playerDolphin.position.set(playerX, playerY, playerZ);
+                playerDolphin.rotation.y = (keys.left ? 0.35 : (keys.right ? -0.35 : 0));
+                playerDolphin.rotation.z = verticalVelocity * 2;
+
+                // スピードに合わせてリアルなしっぽ（三日月形の尾びれ）が上下にダイナミックにバタバタ動く
+                if (tailFlukeMesh) {
+                    tailFlukeMesh.rotation.x = Math.sin(Date.now() * 0.02 * (playerSpeed + 0.5)) * 0.45;
+                }
+
+                rings.forEach(r => {
+                    if (!r.collected && Math.abs(playerZ - r.z) < 3 && Math.abs(playerX - r.x) < 2.0 && Math.abs(playerY - r.y) < 2.5) {
+                        r.collected = true;
+                        r.mesh.visible = false;
+                        score += 300;
+                        showPopup("💎 ＲＩＮＧ！ +300pt");
+                    }
+                });
+
+                coins.forEach(c => {
+                    if (!c.collected && Math.abs(playerZ - c.z) < 3 && Math.abs(playerX - c.x) < 2.0) {
+                        c.collected = true;
+                        c.mesh.visible = false;
+                        score += 100;
+                        showPopup("🪙 ＣＯＩＮ！ +100pt");
+                    }
+                });
+
+                boosters.forEach(b => {
+                    if (Math.abs(playerZ - b.z) < 3 && Math.abs(playerX - b.x) < 2.5 && playerY <= 0.2) {
+                        boostTimer = 150;
+                        playerSpeed = maxSpeed * 1.8;
+                        score += 200;
+                        showPopup("🚀 ＢＯＯＳＴ！ +200pt");
+                    }
+                });
+
+                jumps.forEach(j => {
+                    if (Math.abs(playerZ - j.z) < 3 && Math.abs(playerX - j.x) < 2.5 && playerY <= 0.2) {
+                        verticalVelocity = 0.4;
+                        score += 500;
+                        showPopup("✨ ＪＵＭＰ ＡＩＲ！！ +500pt");
+                    }
+                });
+
+                camera.position.set(playerX * 0.5, playerDolphin.position.y + 3, playerZ - 7);
+                camera.lookAt(playerDolphin.position.x, playerDolphin.position.y + 1, playerZ + 6);
+
+                document.getElementById("score-val").innerText = score;
+                document.getElementById("speed-val").innerText = Math.round(playerSpeed * 100);
+
+                renderer.render(scene, camera);
+                requestAnimationFrame(update);
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
