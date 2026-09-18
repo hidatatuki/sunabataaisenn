@@ -51,7 +51,8 @@
     <div id="combo-popup">✨ ＮＩＣＥ ＪＵＭＰ！ +500pt</div>
 
     <div id="controls-info">
-        [ ↑ / W ] アクセル | [ ↓ / S ] ブレーキ | [ ← → / A D ] 左右移動（A:右 / D:左・コースアウトで減点）<br>
+        スマホ: 端末を傾けて左右旋回 / ブレーキ、画面をタップで加速<br>
+        PC: [ ↑ / W ] 加速 | [ ↓ / S ] ブレーキ | [ ← → / A D ] 左右移動（コースアウトで減点）<br>
         💎 リング潜り（+300pt） ｜ 🚀 加速床（ブースト） ｜ 🌊 ジャンプ台（+500pt） ｜ ⚠️ 外側は減点！
     </div>
 
@@ -84,6 +85,10 @@
         let keys = { up: false, down: false, left: false, right: false };
         let gameActive = false;
         const maxSpeed = 1.6, acceleration = 0.018, deceleration = 0.02;
+        let tiltX = 0;
+        let tiltY = 0;
+        let tapBoost = false;
+        let autoSteer = 0;
         
         let rings = [], boosters = [], jumps = [], coins = [];
         let highScores = JSON.parse(localStorage.getItem('dolphin_highscores') || '[]');
@@ -126,78 +131,89 @@
             window.addEventListener("keydown", (e) => handleKeys(e, true));
             window.addEventListener("keyup", (e) => handleKeys(e, false));
             window.addEventListener("resize", onWindowResize);
+            window.addEventListener("deviceorientation", handleOrientation, true);
+            window.addEventListener("touchstart", handleTouchBoost, { passive: false });
+            window.addEventListener("touchend", () => { tapBoost = false; }, { passive: false });
+            window.addEventListener("pointerdown", handleTouchBoost);
 
             renderer.render(scene, camera);
         }
 
-        // イルカの本体は、実際の動物のような細長い輪郭にする
+        // イルカモデル：前の形に戻し、実際の丸い体のような感覚を保つ
         function createDolphinModel(color) {
             const group = new THREE.Group();
             const bodyMat = new THREE.MeshPhongMaterial({
                 color: color,
-                shininess: 140,
-                specular: 0x9ad8ff,
-                emissive: 0x0c2a49
+                shininess: 120,
+                specular: 0x888888
             });
 
-            // 胴体：やや扁平で先細りの流線型
-            const bodyGeo = new THREE.SphereGeometry(1.0, 28, 24);
-            bodyGeo.scale(3.4, 1.1, 1.55);
+            const bodyGeo = new THREE.CylinderGeometry(0.55, 0.75, 3.2, 16);
+            bodyGeo.rotateX(Math.PI / 2);
             const body = new THREE.Mesh(bodyGeo, bodyMat);
-            body.rotation.z = Math.PI / 2;
+            body.scale.set(1, 0.95, 1.3);
             group.add(body);
 
-            // 顔の前にある鼻先を細くして、実際のイルカ寄りにする
-            const forehead = new THREE.Mesh(new THREE.SphereGeometry(0.82, 18, 18), bodyMat);
-            forehead.scale.set(1.5, 1.1, 1.0);
-            forehead.position.set(2.15, 0.03, 0);
-            group.add(forehead);
+            const headGeo = new THREE.SphereGeometry(0.55, 16, 16);
+            headGeo.scale(1, 0.9, 1.4);
+            const head = new THREE.Mesh(headGeo, bodyMat);
+            head.position.set(0, 0.05, 1.1);
+            group.add(head);
 
-            const snout = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.7, 20), bodyMat);
-            snout.rotation.z = -Math.PI / 2;
-            snout.position.set(3.25, 0.02, 0);
+            const snoutGeo = new THREE.ConeGeometry(0.3, 1.4, 12);
+            snoutGeo.rotateX(Math.PI / 2);
+            const snout = new THREE.Mesh(snoutGeo, bodyMat);
+            snout.position.set(0, -0.05, 1.85);
             group.add(snout);
 
-            // 背びれを小さくして、頭と胴体に自然につながるようにする
-            const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.32, 1.1, 20), bodyMat);
-            dorsal.rotation.z = -Math.PI / 2;
-            dorsal.position.set(0.3, 1.0, 0);
+            const dorsalGeo = new THREE.ConeGeometry(0.18, 0.9, 6);
+            dorsalGeo.rotateZ(-Math.PI / 4);
+            dorsalGeo.rotateX(Math.PI / 12);
+            const dorsal = new THREE.Mesh(dorsalGeo, bodyMat);
+            dorsal.position.set(0, 0.75, -0.3);
             group.add(dorsal);
 
-            // 側びれは薄く、自然に長くひらくようにする
-            const leftFin = new THREE.Mesh(new THREE.ConeGeometry(0.32, 1.25, 18), bodyMat);
-            leftFin.rotation.z = -Math.PI / 2;
-            leftFin.rotation.x = Math.PI / 7;
-            leftFin.rotation.y = -Math.PI / 10;
-            leftFin.position.set(0.1, -0.45, 1.1);
+            const finShape = new THREE.BoxGeometry(1.4, 0.04, 0.5);
+            const leftFin = new THREE.Mesh(finShape, bodyMat);
+            leftFin.position.set(0.75, -0.35, 0.4);
+            leftFin.rotation.z = -Math.PI / 5;
+            leftFin.rotation.y = Math.PI / 5;
             group.add(leftFin);
 
-            const rightFin = new THREE.Mesh(new THREE.ConeGeometry(0.32, 1.25, 18), bodyMat);
-            rightFin.rotation.z = Math.PI / 2;
-            rightFin.rotation.x = -Math.PI / 7;
-            rightFin.rotation.y = Math.PI / 10;
-            rightFin.position.set(0.1, -0.45, -1.1);
+            const rightFin = new THREE.Mesh(finShape, bodyMat);
+            rightFin.position.set(-0.75, -0.35, 0.4);
+            rightFin.rotation.z = Math.PI / 5;
+            rightFin.rotation.y = -Math.PI / 5;
             group.add(rightFin);
 
-            const peduncle = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.34, 1.3, 16), bodyMat);
-            peduncle.rotation.z = Math.PI / 2;
-            peduncle.position.set(-2.2, 0, 0);
+            const peduncleGeo = new THREE.CylinderGeometry(0.18, 0.45, 2.2, 12);
+            peduncleGeo.rotateX(Math.PI / 2);
+            const peduncle = new THREE.Mesh(peduncleGeo, bodyMat);
+            peduncle.position.set(0, 0, -1.9);
             group.add(peduncle);
 
             tailFlukeMesh = new THREE.Group();
 
-            const tailLeft = new THREE.Mesh(new THREE.ConeGeometry(0.95, 2.0, 18), bodyMat);
-            tailLeft.rotation.z = -Math.PI / 2;
-            tailLeft.rotation.y = -Math.PI / 12;
-            tailLeft.position.set(-2.9, 0, 0.9);
+            const lobeGeoLeft = new THREE.BoxGeometry(0.95, 0.03, 0.45);
+            const tailLeft = new THREE.Mesh(lobeGeoLeft, bodyMat);
+            tailLeft.position.set(0.5, 0, -0.15);
+            tailLeft.rotation.y = -Math.PI / 7;
+            tailLeft.rotation.z = -Math.PI / 12;
             tailFlukeMesh.add(tailLeft);
 
-            const tailRight = new THREE.Mesh(new THREE.ConeGeometry(0.95, 2.0, 18), bodyMat);
-            tailRight.rotation.z = Math.PI / 2;
-            tailRight.rotation.y = Math.PI / 12;
-            tailRight.position.set(-2.9, 0, -0.9);
+            const lobeGeoRight = new THREE.BoxGeometry(0.95, 0.03, 0.45);
+            const tailRight = new THREE.Mesh(lobeGeoRight, bodyMat);
+            tailRight.position.set(-0.5, 0, -0.15);
+            tailRight.rotation.y = Math.PI / 7;
+            tailRight.rotation.z = Math.PI / 12;
             tailFlukeMesh.add(tailRight);
 
+            const centerGeo = new THREE.BoxGeometry(0.4, 0.03, 0.5);
+            const tailCenter = new THREE.Mesh(centerGeo, bodyMat);
+            tailCenter.position.set(0, 0, 0);
+            tailFlukeMesh.add(tailCenter);
+
+            tailFlukeMesh.position.set(0, 0, -3.1);
             group.add(tailFlukeMesh);
 
             return group;
@@ -263,6 +279,20 @@
             if (["ArrowDown", "KeyS"].includes(e.code)) keys.down = isDown;
             if (["ArrowLeft", "KeyA"].includes(e.code)) keys.left = isDown;
             if (["ArrowRight", "KeyD"].includes(e.code)) keys.right = isDown;
+        }
+
+        function handleOrientation(event) {
+            if (typeof event.gamma === 'number') {
+                tiltX = Math.max(-30, Math.min(30, event.gamma)) / 30;
+            }
+            if (typeof event.beta === 'number') {
+                tiltY = Math.max(-30, Math.min(30, event.beta - 20)) / 30;
+            }
+        }
+
+        function handleTouchBoost(e) {
+            e.preventDefault();
+            tapBoost = true;
         }
 
         function startGame() {
@@ -371,10 +401,14 @@
                     document.getElementById("boost-status").innerText = "";
                 }
 
-                if (keys.up) {
+                const mobileSteer = tiltX * 0.18;
+                if (mobileSteer > 0.04) playerX -= 0.12;
+                if (mobileSteer < -0.04) playerX += 0.12;
+
+                if (keys.up || tapBoost) {
                     playerSpeed += acceleration;
                     if (playerSpeed > currentMaxSpeed) playerSpeed = currentMaxSpeed;
-                } else if (keys.down) {
+                } else if (keys.down || tiltY > 0.35) {
                     playerSpeed -= deceleration;
                     if (playerSpeed < 0) playerSpeed = 0;
                 } else {
@@ -384,7 +418,7 @@
 
                 score += Math.round(playerSpeed * 2);
 
-                // Aキーで右、Dキーで左移動
+                // PC用のキー操作も残す
                 if (keys.left) playerX += 0.14; 
                 if (keys.right) playerX -= 0.14; 
 
