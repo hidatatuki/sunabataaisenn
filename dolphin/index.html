@@ -132,6 +132,8 @@
         
         let keys = { up: false, down: false, left: false, right: false };
         let gameActive = false;
+        let motionPermissionGranted = false;
+        let motionListenerReady = false;
         const maxSpeed = 1.6, acceleration = 0.018, deceleration = 0.02;
         let tiltX = 0;
         let tiltY = 0;
@@ -185,7 +187,14 @@
             window.addEventListener("keydown", (e) => handleKeys(e, true));
             window.addEventListener("keyup", (e) => handleKeys(e, false));
             window.addEventListener("resize", onWindowResize);
-            window.addEventListener("deviceorientation", handleOrientation, true);
+
+            const isIOSPermissionNeeded = /iPhone|iPad|iPod/i.test(navigator.userAgent) &&
+                typeof DeviceOrientationEvent !== 'undefined' &&
+                typeof DeviceOrientationEvent.requestPermission === 'function';
+            if (!isIOSPermissionNeeded) {
+                bindMotionListener();
+            }
+
             window.addEventListener("touchstart", handleTouchBoost, { passive: false });
             window.addEventListener("touchmove", handleTouchMove, { passive: false });
             window.addEventListener("touchend", () => { tapBoost = false; touchDragActive = false; }, { passive: false });
@@ -346,15 +355,38 @@
             }
         }
 
-        function requestMotionPermission() {
+        function bindMotionListener() {
+            if (motionListenerReady) return;
+            if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+                window.addEventListener('deviceorientation', handleOrientation, true);
+                motionListenerReady = true;
+            }
+        }
+
+        async function requestMotionPermission() {
             const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
             const hasPermissionAPI = typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function';
 
             if (!isMobile || !hasPermissionAPI) {
-                return Promise.resolve(true);
+                motionPermissionGranted = true;
+                bindMotionListener();
+                return true;
             }
 
-            return DeviceOrientationEvent.requestPermission().then((result) => result === 'granted');
+            try {
+                const result = await DeviceOrientationEvent.requestPermission();
+                motionPermissionGranted = result === 'granted';
+                if (motionPermissionGranted) {
+                    bindMotionListener();
+                } else {
+                    showPopup('📱 傾きの許可がないため、タップで加速してください');
+                }
+                return motionPermissionGranted;
+            } catch (error) {
+                motionPermissionGranted = false;
+                showPopup('📱 傾きが使えないため、タップで加速してください');
+                return false;
+            }
         }
 
         function handleTouchBoost(e) {
@@ -387,23 +419,14 @@
             dragTiltY = Math.max(-1, Math.min(1, dragTiltY + dy / 220));
         }
 
-        function startGame() {
+        async function startGame() {
             const inputVal = document.getElementById("username-input").value.trim();
             if (inputVal !== "") {
                 playerName = inputVal;
             }
             document.getElementById("player-name-val").innerText = playerName;
 
-            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            if (isMobile && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                DeviceOrientationEvent.requestPermission().then((result) => {
-                    if (result !== 'granted') {
-                        showPopup('📱 傾きの許可をお願いします');
-                    }
-                }).catch(() => {
-                    showPopup('📱 傾きの許可をお願いします');
-                });
-            }
+            await requestMotionPermission();
 
             document.getElementById("message-overlay").style.display = "none";
             gameActive = true;
