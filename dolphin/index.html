@@ -130,90 +130,68 @@
             renderer.render(scene, camera);
         }
 
-        // イルカモデル（しっぽの造形に超こだわり、三日月形の美しい尾びれを構築）
+        // イルカモデル：武骨な角ばった形を、流線型の海獣に近づける
         function createDolphinModel(color) {
             const group = new THREE.Group();
-            const bodyMat = new THREE.MeshPhongMaterial({ 
-                color: color, 
-                shininess: 120, 
-                specular: 0x888888 
+            const bodyMat = new THREE.MeshPhongMaterial({
+                color: color,
+                shininess: 140,
+                specular: 0x9ad8ff,
+                emissive: 0x0c2a49
             });
 
-            // 1. メインボディ（胴体中央）
-            const bodyGeo = new THREE.CylinderGeometry(0.55, 0.75, 3.2, 16);
-            bodyGeo.rotateX(Math.PI / 2);
-            const body = new THREE.Mesh(bodyGeo, bodyMat);
-            body.scale.set(1, 0.95, 1.3);
+            const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.72, 3.2, 6, 20), bodyMat);
+            body.rotation.z = Math.PI / 2;
+            body.scale.set(1.4, 1.0, 1.2);
             group.add(body);
 
-            // 2. 頭部（メロン部）と口先（スノート）
-            const headGeo = new THREE.SphereGeometry(0.55, 16, 16);
-            headGeo.scale(1, 0.9, 1.4);
-            const head = new THREE.Mesh(headGeo, bodyMat);
-            head.position.set(0, 0.05, 1.1);
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.78, 24, 20), bodyMat);
+            head.scale.set(1.4, 1.0, 1.2);
+            head.position.set(1.9, 0.05, 0);
             group.add(head);
 
-            const snoutGeo = new THREE.ConeGeometry(0.3, 1.4, 12);
-            snoutGeo.rotateX(Math.PI / 2);
-            const snout = new THREE.Mesh(snoutGeo, bodyMat);
-            snout.position.set(0, -0.05, 1.85);
+            const snout = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.4, 18), bodyMat);
+            snout.rotation.z = -Math.PI / 2;
+            snout.position.set(2.9, 0.05, 0);
             group.add(snout);
 
-            // 3. 背びれ
-            const dorsalGeo = new THREE.ConeGeometry(0.18, 0.9, 6);
-            dorsalGeo.rotateZ(-Math.PI / 4);
-            dorsalGeo.rotateX(Math.PI / 12);
-            const dorsal = new THREE.Mesh(dorsalGeo, bodyMat);
-            dorsal.position.set(0, 0.75, -0.3);
+            const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.0, 18), bodyMat);
+            dorsal.rotation.z = -Math.PI / 2;
+            dorsal.position.set(0.4, 0.9, 0);
             group.add(dorsal);
 
-            // 4. 胸びれ
-            const finShape = new THREE.BoxGeometry(1.4, 0.04, 0.5);
-            const leftFin = new THREE.Mesh(finShape, bodyMat);
-            leftFin.position.set(0.75, -0.35, 0.4);
-            leftFin.rotation.z = -Math.PI / 5;
-            leftFin.rotation.y = Math.PI / 5;
+            const leftFin = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.1, 18), bodyMat);
+            leftFin.rotation.z = -Math.PI / 2;
+            leftFin.rotation.y = -Math.PI / 8;
+            leftFin.position.set(0.1, -0.6, 0.95);
             group.add(leftFin);
 
-            const rightFin = new THREE.Mesh(finShape, bodyMat);
-            rightFin.position.set(-0.75, -0.35, 0.4);
-            rightFin.rotation.z = Math.PI / 5;
-            rightFin.rotation.y = -Math.PI / 5;
+            const rightFin = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.1, 18), bodyMat);
+            rightFin.rotation.z = Math.PI / 2;
+            rightFin.rotation.y = Math.PI / 8;
+            rightFin.position.set(0.1, -0.6, -0.95);
             group.add(rightFin);
 
-            // 5. 尾柄（しっぽへ向かう細い部分）
-            const peduncleGeo = new THREE.CylinderGeometry(0.18, 0.45, 2.2, 12);
-            peduncleGeo.rotateX(Math.PI / 2);
-            const peduncle = new THREE.Mesh(peduncleGeo, bodyMat);
-            peduncle.position.set(0, 0, -1.9);
+            const peduncle = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.35, 1.5, 16), bodyMat);
+            peduncle.rotation.z = Math.PI / 2;
+            peduncle.position.set(-1.8, 0, 0);
             group.add(peduncle);
 
-            // 6. ★【こだわりポイント】超リアルな三日月形の尾びれ（フルーク）パーツ群
             tailFlukeMesh = new THREE.Group();
-            
-            // 左側の尾びれパーツ（スイープ形状）
-            const lobeGeoLeft = new THREE.BoxGeometry(0.95, 0.03, 0.45);
-            const tailLeft = new THREE.Mesh(lobeGeoLeft, bodyMat);
-            tailLeft.position.set(0.5, 0, -0.15);
-            tailLeft.rotation.y = -Math.PI / 7;
-            tailLeft.rotation.z = -Math.PI / 12;
+
+            const tailLeft = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 16), bodyMat);
+            tailLeft.rotation.z = -Math.PI / 2;
+            tailLeft.rotation.y = -Math.PI / 9;
+            tailLeft.position.set(-2.2, 0, 0.8);
             tailFlukeMesh.add(tailLeft);
 
-            // 右側の尾びれパーツ（スイープ形状）
-            const lobeGeoRight = new THREE.BoxGeometry(0.95, 0.03, 0.45);
-            const tailRight = new THREE.Mesh(lobeGeoRight, bodyMat);
-            tailRight.position.set(-0.5, 0, -0.15);
-            tailRight.rotation.y = Math.PI / 7;
-            tailRight.rotation.z = Math.PI / 12;
+            const tailRight = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 16), bodyMat);
+            tailRight.rotation.z = Math.PI / 2;
+            tailRight.rotation.y = Math.PI / 9;
+            tailRight.position.set(-2.2, 0, -0.8);
             tailFlukeMesh.add(tailRight);
 
-            // 中央の接続ジョイント（自然なつながり）
-            const centerGeo = new THREE.BoxGeometry(0.4, 0.03, 0.5);
-            const tailCenter = new THREE.Mesh(centerGeo, bodyMat);
-            tailCenter.position.set(0, 0, 0);
-            tailFlukeMesh.add(tailCenter);
-
-            tailFlukeMesh.position.set(0, 0, -3.1);
+            tailFlukeMesh.position.set(0, 0, 0);
             group.add(tailFlukeMesh);
 
             return group;
