@@ -307,7 +307,7 @@
                 motionYaw = targetYaw * (Math.PI / 3);
             }
             if (typeof event.beta === 'number') {
-                const targetPitch = Math.max(-1, Math.min(1, -event.beta / 55));
+                const targetPitch = Math.max(-1, Math.min(1, event.beta / 55));
                 motionPitch = targetPitch * (Math.PI / 6);
             }
         }
