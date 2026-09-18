@@ -15,12 +15,14 @@
             overflow: hidden;
             background-color: #000;
             font-family: 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+            touch-action: none;
         }
 
         #canvas-container {
             width: 100vw;
             height: 100vh;
             display: block;
+            touch-action: none;
         }
 
         .overlay-screen {
@@ -336,9 +338,10 @@
             spawnTargets();
 
             window.addEventListener('resize', onWindowResize);
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mousedown', onMouseDown);
-            document.addEventListener('mouseup', onMouseUp);
+            window.addEventListener('pointermove', onPointerMove);
+            window.addEventListener('pointerdown', onPointerDown);
+            window.addEventListener('pointerup', onPointerUp);
+            window.addEventListener('pointercancel', onPointerUp);
             document.addEventListener('contextmenu', e => e.preventDefault());
 
             animate();
@@ -597,11 +600,30 @@
             targetMeshes.push(mesh);
         }
 
-        function onMouseMove(event) {
-            if (!isGameStarted || document.pointerLockElement !== document.body) return;
+        let touchLookActive = false;
+        let lastTouchX = 0;
+        let lastTouchY = 0;
+
+        function onPointerMove(event) {
+            if (!isGameStarted) return;
+
+            if (event.pointerType === 'touch' && touchLookActive) {
+                const dx = event.clientX - lastTouchX;
+                const dy = event.clientY - lastTouchY;
+                lastTouchX = event.clientX;
+                lastTouchY = event.clientY;
+
+                yaw -= dx * 0.006;
+                pitch -= dy * 0.005;
+                pitch = Math.max(-Math.PI / 6, Math.min(Math.PI / 6, pitch));
+                yaw = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, yaw));
+                camera.rotation.set(pitch, yaw, 0, 'YXZ');
+                return;
+            }
+
+            if (document.pointerLockElement !== document.body) return;
 
             const sensitivity = isAiming ? 0.001 : 0.0022;
-
             yaw -= event.movementX * sensitivity;
             pitch -= event.movementY * sensitivity;
 
@@ -611,14 +633,26 @@
             camera.rotation.set(pitch, yaw, 0, 'YXZ');
         }
 
-        function onMouseDown(event) {
+        function onPointerDown(event) {
             if (!isGameStarted) return;
+
+            if (event.pointerType === 'touch') {
+                touchLookActive = true;
+                lastTouchX = event.clientX;
+                lastTouchY = event.clientY;
+                shootCork();
+                return;
+            }
 
             if (event.button === 0) shootCork();
             if (event.button === 2) isAiming = true;
         }
 
-        function onMouseUp(event) {
+        function onPointerUp(event) {
+            if (event.pointerType === 'touch') {
+                touchLookActive = false;
+                return;
+            }
             if (event.button === 2) isAiming = false;
         }
 
