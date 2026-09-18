@@ -22,7 +22,22 @@
     body {
         position: relative;
     }
-        #ui { position: absolute; top: 20px; left: 20px; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8); pointer-events: none; }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            background-image: url('./background-underwater.jpg');
+            background-size: cover;
+            background-position: center;
+            opacity: 0.80;
+            z-index: 0;
+            pointer-events: none;
+        }
+        canvas {
+            position: relative;
+            z-index: 1;
+        }
+        #ui { position: absolute; top: 20px; left: 20px; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.8); pointer-events: none; z-index: 2; }
         h1 { margin: 0 0 10px 0; font-size: clamp(18px, 2vw, 22px); color: #00ffff; }
         .stat { font-size: clamp(14px, 1.6vw, 20px); margin-bottom: 8px; font-weight: bold; }
         #combo-popup {
@@ -39,8 +54,8 @@
             transition: opacity 0.3s, transform 0.3s;
             z-index: 5;
         }
-        #controls-info { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 10px; color: #fff; text-align: center; border: 1px solid rgba(255,255,255,0.3); font-size: 14px; line-height: 1.6; max-width: min(92vw, 780px); }
-        #message-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0, 30, 60, 0.95); color: #fff; z-index: 10; }
+        #controls-info { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 10px; color: #fff; text-align: center; border: 1px solid rgba(255,255,255,0.3); font-size: 14px; line-height: 1.6; max-width: min(92vw, 780px); z-index: 2; }
+        #message-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0, 30, 60, 0.72); color: #fff; z-index: 10; }
         #message-overlay h2 { font-size: 36px; margin-bottom: 15px; text-shadow: 0 0 10px #00ffff; text-align: center; }
         .input-group { margin-bottom: 20px; text-align: center; }
         .input-group label { display: block; font-size: 16px; margin-bottom: 8px; color: #00ffff; }
